@@ -25,6 +25,18 @@ try {
         echo json_encode(['error' => 'Missing parameters']);
         exit();
     }
+    // Look up sender email
+    $stmt = $pdo->prepare('SELECT email FROM users WHERE id = ?');
+    $stmt->execute([$sender_user_id]);
+    $sender = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$sender) {
+        echo json_encode(['error' => 'Sender not found']);
+        exit();
+    }
+    if (strtolower($recipient_email) === strtolower($sender['email'])) {
+        echo json_encode(['error' => 'Cannot transfer to self']);
+        exit();
+    }
     // Look up recipient
     $stmt = $pdo->prepare('SELECT id FROM users WHERE email = ?');
     $stmt->execute([$recipient_email]);

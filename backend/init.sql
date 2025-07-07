@@ -30,4 +30,6 @@ ON DUPLICATE KEY UPDATE email=email;
 INSERT INTO transactions (user_id, type, amount, currency, description, created_at) VALUES
   (1, 'deposit', 1000, 'USD', 'Initial deposit', NOW()),
   (1, 'deposit', 500, 'EUR', 'Initial deposit', NOW()),
-  (1, 'deposit', 2000, 'ILS', 'Initial deposit', NOW()); 
+  (1, 'deposit', 2000, 'ILS', 'Initial deposit', NOW());
+
+-- (No exchange_rates table, as rates are now fetched live from the API) 

@@ -20,7 +20,7 @@ Built with React (Vite + TailwindCSS), PHP (Apache), MySQL, and Docker for zero-
 **1. Clone the repository:**
 ```sh
 git clone https://github.com/elroei/currency-view-dashboard.git
-cd currency-view-dashboar
+cd currency-view-dashboard
 ```
 
 **2. Start all services (no manual DB setup needed!):**

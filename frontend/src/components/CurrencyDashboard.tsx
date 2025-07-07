@@ -41,15 +41,6 @@ const mockExchangeRates = [
   { currency: "GBP", rate: 4.64, lastUpdated: "2024-01-15 14:30" }
 ];
 
-const mockHistoricalData = [
-  { date: "2024-01-10", rate: 3.65 },
-  { date: "2024-01-11", rate: 3.68 },
-  { date: "2024-01-12", rate: 3.70 },
-  { date: "2024-01-13", rate: 3.69 },
-  { date: "2024-01-14", rate: 3.67 },
-  { date: "2024-01-15", rate: 3.67 }
-];
-
 const mockTransactions = [
   { id: 1, date: "2024-01-15", amount: 500, currency: "USD", type: "deposit", equivalent: 1835 },
   { id: 2, date: "2024-01-15", amount: 200, currency: "EUR", type: "deposit", equivalent: 796 },
@@ -63,6 +54,11 @@ const currencyFlags = {
   GBP: "🇬🇧",
   ILS: "🇮🇱"
 };
+
+// Helper to sort rates by date ascending (oldest to newest)
+function sortRatesAsc(rates) {
+  return [...rates].sort((a, b) => new Date(a.date) - new Date(b.date));
+}
 
 export function CurrencyDashboard() {
   const [preferredCurrency, setPreferredCurrency] = useState("ILS");
@@ -82,6 +78,7 @@ export function CurrencyDashboard() {
   const [exchangeRates, setExchangeRates] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [historicalRates, setHistoricalRates] = useState<{ [currency: string]: { date: string, rate: number }[] }>({});
 
   const USERS = [
     { id: 1, email: 'user1@example.com' },
@@ -130,6 +127,66 @@ export function CurrencyDashboard() {
       toast({ title: "Failed to load transactions", variant: "destructive" });
     }
   };
+
+  // Fetch historical rates for yesterday, 1 month before yesterday, and 2 months before yesterday for USD, EUR, GBP to ILS
+  useEffect(() => {
+    async function fetchHistoricalRates() {
+      const cacheKey = 'currencyapi_historical_rates_v1';
+      const cache = localStorage.getItem(cacheKey);
+      const cacheTTL = 5 * 60 * 1000; // 5 minutes
+      const now = Date.now();
+
+      if (cache) {
+        const { timestamp, data } = JSON.parse(cache);
+        if (now - timestamp < cacheTTL) {
+          setHistoricalRates(data);
+          return;
+        }
+      }
+
+      const apiKey = import.meta.env.VITE_CURRENCYAPI_KEY;
+      const currencies = ["USD", "EUR", "GBP"];
+      const toCurrency = "ILS";
+      // Use yesterday as the most recent date
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      // Helper to get YYYY-MM-DD string
+      const getDateStr = (date) => date.toISOString().slice(0, 10);
+      // Calculate the three dates: yesterday, 1 month before, 2 months before
+      const dates = [
+        new Date(yesterday),
+        new Date(yesterday),
+        new Date(yesterday)
+      ];
+      dates[1].setMonth(dates[1].getMonth() - 1);
+      dates[2].setMonth(dates[2].getMonth() - 2);
+      const dateStrs = dates.map(getDateStr);
+      const results: { [currency: string]: { date: string, rate: number }[] } = {};
+      for (const base of currencies) {
+        results[base] = [];
+        for (const dateStr of dateStrs) {
+          const url = `https://api.currencyapi.com/v3/historical?apikey=${apiKey}&date=${dateStr}&base_currency=${base}&currencies=${toCurrency}`;
+          try {
+            // eslint-disable-next-line no-await-in-loop
+            const resp = await fetch(url);
+            // eslint-disable-next-line no-await-in-loop
+            const json = await resp.json();
+            const value = json?.data?.[toCurrency]?.value;
+            if (value) {
+              results[base].push({ date: dateStr, rate: value });
+            }
+          } catch (e) {
+            // Optionally handle error
+          }
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise(res => setTimeout(res, 200)); // 0.2s delay
+        }
+      }
+      setHistoricalRates(results);
+      localStorage.setItem(cacheKey, JSON.stringify({ timestamp: now, data: results }));
+    }
+    fetchHistoricalRates();
+  }, []);
 
   // Initial load
   useEffect(() => {
@@ -439,10 +496,13 @@ export function CurrencyDashboard() {
           <CardContent>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={mockHistoricalData}>
+                <LineChart data={sortRatesAsc(historicalRates[selectedCurrencyChart] || [])}>
                   <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
                   <XAxis dataKey="date" />
-                  <YAxis />
+                  <YAxis 
+                    domain={[dataMin => dataMin - 0.05, dataMax => dataMax + 0.05]}
+                    tickFormatter={value => value.toFixed(2)}
+                  />
                   <Tooltip 
                     contentStyle={{
                       backgroundColor: 'hsl(var(--background))',
@@ -454,9 +514,10 @@ export function CurrencyDashboard() {
                   <Line 
                     type="monotone" 
                     dataKey="rate" 
-                    stroke="hsl(var(--primary))" 
-                    strokeWidth={3}
-                    dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2, r: 4 }}
+                    stroke="#ff007a" 
+                    strokeWidth={4}
+                    dot={{ fill: '#ff007a', stroke: '#fff', strokeWidth: 2, r: 8 }}
+                    activeDot={{ r: 12, fill: '#fff', stroke: '#ff007a', strokeWidth: 4 }}
                   />
                 </LineChart>
               </ResponsiveContainer>
