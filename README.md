@@ -1,5 +1,15 @@
 # 💱 Currency Wallet – Full Stack (React + PHP + MySQL + Docker)
 
+---
+
+## 🛠️ Prerequisites
+
+- **Docker Desktop** must be installed and running on your system.
+  - Download: https://www.docker.com/products/docker-desktop/
+  - Works on Windows, macOS, and Linux.
+
+---
+
 A modern, multi-user currency wallet system supporting USD, EUR, GBP, and Israeli Shekel (ILS).  
 Built with React (Vite + TailwindCSS), PHP (Apache), MySQL, and Docker for zero-effort local setup.
 
@@ -9,8 +19,8 @@ Built with React (Vite + TailwindCSS), PHP (Apache), MySQL, and Docker for zero-
 
 **1. Clone the repository:**
 ```sh
-git clone <your-repo-url>
-cd <your-repo-directory>
+git clone https://github.com/elroei/currency-view-dashboard.git
+cd currency-view-dashboar
 ```
 
 **2. Start all services (no manual DB setup needed!):**
