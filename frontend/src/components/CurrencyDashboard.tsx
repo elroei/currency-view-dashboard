@@ -77,99 +77,178 @@ export function CurrencyDashboard() {
   const [selectedCurrencyChart, setSelectedCurrencyChart] = useState("USD");
   const { toast } = useToast();
 
-  // API endpoints that would be called in production:
-  // POST /api/deposit.php - Handle currency deposits
-  // GET /api/balances.php - Get user balances
-  // GET /api/rates.php - Get current exchange rates
-  // GET /api/historical_rates.php - Get historical rate data
-  // POST /api/transfer.php - Handle user-to-user transfers
-  // GET /api/transactions.php - Get transaction history
-  // POST /api/set_alert.php - Set currency rate alerts
+  // New state for real data
+  const [balances, setBalances] = useState({});
+  const [exchangeRates, setExchangeRates] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(false);
 
+  const USERS = [
+    { id: 1, email: 'user1@example.com' },
+    { id: 2, email: 'user2@example.com' }
+  ];
+  const [selectedUser, setSelectedUser] = useState(USERS[0]);
+
+  // Fetch balances
+  const fetchBalances = async (userId = selectedUser.id) => {
+    try {
+      const res = await fetch("/api/balance.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId })
+      });
+      const data = await res.json();
+      setBalances(data.balances || {});
+    } catch (e) {
+      toast({ title: "Failed to load balances", variant: "destructive" });
+    }
+  };
+
+  // Fetch exchange rates
+  const fetchExchangeRates = async () => {
+    try {
+      const res = await fetch("/api/get_rates.php");
+      const data = await res.json();
+      const ratesArr = Object.entries({ ...data.rates, ILS: 1, ...data.rates }).map(([currency, rate]) => ({ currency, rate, lastUpdated: new Date().toISOString() }));
+      setExchangeRates(ratesArr);
+    } catch (e) {
+      toast({ title: "Failed to load exchange rates", variant: "destructive" });
+    }
+  };
+
+  // Fetch transactions
+  const fetchTransactions = async (userId = selectedUser.id) => {
+    try {
+      const res = await fetch("/api/transactions.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId })
+      });
+      const data = await res.json();
+      setTransactions(data.transactions || []);
+    } catch (e) {
+      toast({ title: "Failed to load transactions", variant: "destructive" });
+    }
+  };
+
+  // Initial load
+  useEffect(() => {
+    fetchBalances(selectedUser.id);
+    fetchExchangeRates();
+    fetchTransactions(selectedUser.id);
+    // eslint-disable-next-line
+  }, []);
+
+  // Re-fetch on user change
+  useEffect(() => {
+    fetchBalances(selectedUser.id);
+    fetchTransactions(selectedUser.id);
+    // eslint-disable-next-line
+  }, [selectedUser]);
+
+  // Deposit handler
   const handleDeposit = async () => {
     if (!depositAmount || parseFloat(depositAmount) <= 0) {
-      toast({
-        title: "Invalid Amount",
-        description: "Please enter a valid deposit amount.",
-        variant: "destructive"
-      });
+      toast({ title: "Invalid Amount", description: "Please enter a valid deposit amount.", variant: "destructive" });
       return;
     }
-
-    // In production: POST to /api/deposit.php
+    setLoading(true);
     try {
-      // Mock API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      toast({
-        title: "Deposit Successful",
-        description: `Successfully deposited ${depositAmount} ${depositCurrency}`,
-        variant: "default"
+      const res = await fetch("/api/deposit.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: selectedUser.id, amount: depositAmount, currency: depositCurrency })
       });
-      
-      setDepositAmount("");
-    } catch (error) {
-      toast({
-        title: "Deposit Failed",
-        description: "Please try again later.",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const handleTransfer = async () => {
-    if (!transferAmount || !recipientEmail) {
-      toast({
-        title: "Missing Information",
-        description: "Please fill in all transfer fields.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    // In production: POST to /api/transfer.php
-    try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      toast({
-        title: "Transfer Successful",
-        description: `Sent ${transferAmount} ${transferCurrency} to ${recipientEmail}`,
-        variant: "default"
-      });
-      
-      setTransferAmount("");
-      setRecipientEmail("");
-      setIsTransferModalOpen(false);
-    } catch (error) {
-      toast({
-        title: "Transfer Failed",
-        description: "Please try again later.",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const refreshRates = async () => {
-    // In production: GET /api/rates.php
-    toast({
-      title: "Rates Updated",
-      description: "Exchange rates have been refreshed.",
-      variant: "default"
-    });
-  };
-
-  const getTotalBalance = () => {
-    return Object.entries(mockBalances).reduce((total, [currency, amount]) => {
-      const rate = mockExchangeRates.find(r => r.currency === currency)?.rate || 1;
-      if (preferredCurrency === "ILS") {
-        return total + (amount * rate);
+      const data = await res.json();
+      if (data.success) {
+        toast({ title: "Deposit Successful", description: `Successfully deposited ${depositAmount} ${depositCurrency}` });
+        setDepositAmount("");
+        fetchBalances(selectedUser.id);
+        fetchTransactions(selectedUser.id);
+      } else {
+        toast({ title: "Deposit Failed", description: data.error || "Please try again later.", variant: "destructive" });
       }
-      return total + amount; // Simplified conversion
+    } catch (error) {
+      toast({ title: "Deposit Failed", description: "Please try again later.", variant: "destructive" });
+    }
+    setLoading(false);
+  };
+
+  // Transfer handler
+  const handleTransfer = async () => {
+    if (!transferAmount || !transferCurrency || !recipientEmail) {
+      toast({ title: "Missing Information", description: "Please fill in all transfer fields.", variant: "destructive" });
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/transfer.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sender_user_id: selectedUser.id, recipient_email: recipientEmail, amount: transferAmount, currency: transferCurrency, rate: getRate(transferCurrency, transferCurrency) })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast({ title: "Transfer Successful", description: `Sent ${transferAmount} ${transferCurrency} to ${recipientEmail}` });
+        setTransferAmount("");
+        setRecipientEmail("");
+        setIsTransferModalOpen(false);
+        fetchBalances(selectedUser.id);
+        fetchTransactions(selectedUser.id);
+      } else {
+        toast({ title: "Transfer Failed", description: data.error || "Please try again later.", variant: "destructive" });
+      }
+    } catch (error) {
+      toast({ title: "Transfer Failed", description: "Please try again later.", variant: "destructive" });
+    }
+    setLoading(false);
+  };
+
+  // Helper to get rate
+  const getRate = (from, to) => {
+    if (from === to) return 1;
+    const fromRate = exchangeRates.find(r => r.currency === from)?.rate || 1;
+    const toRate = exchangeRates.find(r => r.currency === to)?.rate || 1;
+    return toRate / fromRate;
+  };
+
+  // Refresh rates
+  const refreshRates = async () => {
+    await fetchExchangeRates();
+    toast({ title: "Rates Updated", description: "Exchange rates have been refreshed." });
+  };
+
+  // Calculate total balance in preferred currency
+  const getTotalBalance = () => {
+    return Object.entries(balances).reduce((total, [currency, amount]) => {
+      const rate = getRate(currency, preferredCurrency);
+      return total + (parseFloat(amount as any) * rate);
     }, 0);
   };
 
   return (
     <div className="min-h-screen bg-background">
+      {/* User Selector */}
+      <div className="container mx-auto px-4 pt-6 pb-2 flex flex-col md:flex-row md:items-center md:justify-between">
+        <div className="mb-2 md:mb-0">
+          <label htmlFor="user-select" className="me-2 fw-bold">Select User:</label>
+          <select
+            id="user-select"
+            className="form-select"
+            value={selectedUser.id}
+            onChange={e => {
+              const user = USERS.find(u => u.id === Number(e.target.value));
+              if (user) setSelectedUser(user);
+            }}
+            style={{ width: 260, display: 'inline-block' }}
+          >
+            {USERS.map(user => (
+              <option key={user.id} value={user.id}>{user.email}</option>
+            ))}
+          </select>
+        </div>
+        <div className="text-muted-foreground text-sm">Current user: <span className="fw-bold">{selectedUser.email}</span></div>
+      </div>
       {/* Header */}
       <header className="border-b border-border bg-card shadow-card">
         <div className="container mx-auto px-4 py-4">
@@ -236,7 +315,7 @@ export function CurrencyDashboard() {
             </CardContent>
           </Card>
 
-          {Object.entries(mockBalances).map(([currency, amount]) => (
+          {Object.entries(balances).map(([currency, amount]) => (
             <Card key={currency} className="bg-gradient-card shadow-card hover:shadow-elevated transition-all duration-200">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
@@ -285,7 +364,7 @@ export function CurrencyDashboard() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {Object.keys(mockBalances).map(currency => (
+                      {["USD", "EUR", "GBP", "ILS"].map(currency => (
                         <SelectItem key={currency} value={currency}>
                           {currencyFlags[currency as keyof typeof currencyFlags]} {currency}
                         </SelectItem>
@@ -299,8 +378,9 @@ export function CurrencyDashboard() {
                 className="w-full" 
                 variant="success"
                 size="lg"
+                disabled={loading}
               >
-                Deposit Funds
+                {loading ? "Depositing..." : "Deposit Funds"}
               </Button>
             </CardContent>
           </Card>
@@ -317,7 +397,7 @@ export function CurrencyDashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {mockExchangeRates.map((rate) => (
+                {exchangeRates.map((rate) => (
                   <div key={rate.currency} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
                     <div className="flex items-center space-x-2">
                       <span className="text-lg">{currencyFlags[rate.currency as keyof typeof currencyFlags]}</span>
@@ -395,7 +475,7 @@ export function CurrencyDashboard() {
                 </CardTitle>
                 <CardDescription>Your latest wallet activity</CardDescription>
               </div>
-              <Badge variant="secondary">{mockTransactions.length} transactions</Badge>
+              <Badge variant="secondary">{transactions.length} transactions</Badge>
             </CardHeader>
             <CardContent>
               <Table>
@@ -408,17 +488,16 @@ export function CurrencyDashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockTransactions.map((transaction) => (
+                  {transactions.map((transaction) => (
                     <TableRow key={transaction.id}>
                       <TableCell>{transaction.date}</TableCell>
                       <TableCell>
                         <Badge variant={transaction.type === 'deposit' ? 'default' : 'secondary'}>
                           {transaction.type === 'deposit' ? (
-                            <ArrowDownRight className="h-3 w-3 mr-1" />
+                            <><ArrowDownRight className="h-3 w-3 mr-1" />{transaction.type}</>
                           ) : (
-                            <ArrowUpRight className="h-3 w-3 mr-1" />
+                            <><ArrowUpRight className="h-3 w-3 mr-1" />{transaction.type}</>
                           )}
-                          {transaction.type}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -442,9 +521,9 @@ export function CurrencyDashboard() {
             <CardContent className="space-y-4">
               <Dialog open={isTransferModalOpen} onOpenChange={setIsTransferModalOpen}>
                 <DialogTrigger asChild>
-                  <Button variant="accent" className="w-full" size="lg">
+                  <Button variant="accent" className="w-full" size="lg" disabled={loading}>
                     <Send className="h-4 w-4 mr-2" />
-                    Send Money
+                    {loading ? "Sending..." : "Send Money"}
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
@@ -483,7 +562,7 @@ export function CurrencyDashboard() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {Object.keys(mockBalances).map(currency => (
+                            {["USD", "EUR", "GBP", "ILS"].map(currency => (
                               <SelectItem key={currency} value={currency}>
                                 {currencyFlags[currency as keyof typeof currencyFlags]} {currency}
                               </SelectItem>
@@ -492,8 +571,8 @@ export function CurrencyDashboard() {
                         </Select>
                       </div>
                     </div>
-                    <Button onClick={handleTransfer} className="w-full" variant="financial">
-                      Send Transfer
+                    <Button onClick={handleTransfer} className="w-full" variant="financial" disabled={loading}>
+                      {loading ? "Sending..." : "Send Transfer"}
                     </Button>
                   </div>
                 </DialogContent>

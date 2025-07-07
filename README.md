@@ -1,73 +1,113 @@
-# Welcome to your Lovable project
+# 💱 Currency Wallet – Full Stack (React + PHP + MySQL + Docker)
 
-## Project info
+A modern, multi-user currency wallet system supporting USD, EUR, GBP, and Israeli Shekel (ILS).  
+Built with React (Vite + TailwindCSS), PHP (Apache), MySQL, and Docker for zero-effort local setup.
 
-**URL**: https://lovable.dev/projects/c7c4f81a-44c2-4506-8aa7-5c4a64e932e0
+---
 
-## How can I edit this code?
+## 🚀 Quick Start
 
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/c7c4f81a-44c2-4506-8aa7-5c4a64e932e0) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
+**1. Clone the repository:**
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+git clone <your-repo-url>
+cd <your-repo-directory>
 ```
 
-**Edit a file directly in GitHub**
+**2. Start all services (no manual DB setup needed!):**
+```sh
+docker-compose up --build
+```
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+**3. Access the app:**
+- **Frontend:** [http://localhost:3000](http://localhost:3000)
+- **Backend API:** [http://localhost:8000/api/](http://localhost:8000/api/)
+- **phpMyAdmin:** [http://localhost:8081](http://localhost:8081)  
+  (Login: `wallet_user` / `wallet_pass`, Server: `db`)
 
-**Use GitHub Codespaces**
+---
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## 🗄️ Database & Seeding
 
-## What technologies are used for this project?
+- **MySQL 8.0** container auto-creates the `wallet` database.
+- **Schema and seed data** are loaded automatically from [`backend/init.sql`](backend/init.sql):
+  - **Tables:** `users`, `transactions`
+  - **Seed users:**
+    - `user1@example.com` (id: 1, initial: USD 1000, EUR 500, ILS 2000)
+    - `user2@example.com` (id: 2, initial: USD 0, EUR 0, ILS 0)
+- **No manual SQL or DB creation required.**
 
-This project is built with:
+---
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## 🧩 Project Structure
 
-## How can I deploy this project?
+```
+/frontend   # React + Vite + TailwindCSS frontend
+/backend    # PHP 7.4+ backend (Apache), API endpoints in /api
+/backend/init.sql  # MySQL schema & seed data (auto-loaded)
+/docker-compose.yml # Multi-service orchestration
+```
 
-Simply open [Lovable](https://lovable.dev/projects/c7c4f81a-44c2-4506-8aa7-5c4a64e932e0) and click on Share -> Publish.
+---
 
-## Can I connect a custom domain to my Lovable project?
+## 🔌 API Endpoints
 
-Yes, you can!
+All endpoints return JSON and support CORS.
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+| Method | Endpoint                | Description                                 |
+|--------|-------------------------|---------------------------------------------|
+| POST   | `/api/deposit.php`      | Deposit funds (requires `user_id`)          |
+| GET/POST | `/api/balance.php`    | Get balances for a user (`user_id`)         |
+| GET    | `/api/get_rates.php`    | Get latest exchange rates                   |
+| GET/POST | `/api/transactions.php` | List transactions for a user (`user_id`)   |
+| POST   | `/api/transfer.php`     | Transfer between users (by email)           |
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+---
+
+## 👤 Multi-User Support
+
+- **User selector** in the frontend: switch between `user1@example.com` and `user2@example.com`.
+- All wallet actions (deposit, transfer, view balances) are user-specific.
+- Transfers are performed by entering the recipient's email.
+
+---
+
+## 💱 Currency Support
+
+- **Supported:** USD, EUR, GBP, ILS (Israeli Shekel)
+- All wallet operations and balances support ILS natively.
+
+---
+
+## 🛠️ Development & Customization
+
+- **To reset the database** (wipe all data and re-seed):
+  ```sh
+  docker-compose down -v
+  docker-compose up --build
+  ```
+- **To add more sample data:**  
+  Edit [`backend/init.sql`](backend/init.sql) and re-run the above reset.
+
+- **Backend environment variables** (see `backend/config.php`):
+  - `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASS`, `DEFAULT_DISPLAY_CURRENCY`
+  - These are set automatically by Docker Compose.
+
+---
+
+## 📝 Notes
+
+- **No manual setup required:**  
+  Just run `docker-compose up --build` and everything is ready.
+- **phpMyAdmin** is available for DB inspection and manual queries.
+- **Frontend** is served on port 3000, backend API on 8000, phpMyAdmin on 8081.
+
+---
+
+## 📄 License
+
+MIT (or your preferred license)
+
+---
+
+**Enjoy your full-stack, multi-currency wallet!**  
+If you have questions or want to contribute, open an issue or pull request.
