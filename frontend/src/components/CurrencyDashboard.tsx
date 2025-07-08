@@ -26,6 +26,9 @@ import {
   History
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
+import { format } from "date-fns";
 
 // Mock data - In production, this would come from your PHP backend APIs
 const mockBalances = {
@@ -80,11 +83,93 @@ export function CurrencyDashboard() {
   const [loading, setLoading] = useState(false);
   const [historicalRates, setHistoricalRates] = useState<{ [currency: string]: { date: string, rate: number }[] }>({});
 
+  // Notification state
+  const [notifications, setNotifications] = useState([]);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+  // Settings modal state
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  // Theme state
+  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
+
+  // Add at the top, after other useState hooks
+  const [rateAlerts, setRateAlerts] = useState(() => {
+    // Load from localStorage
+    try {
+      return JSON.parse(localStorage.getItem('usdIlsRateAlerts') || '[]');
+    } catch {
+      return [];
+    }
+  });
+
+  // Save alerts to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('usdIlsRateAlerts', JSON.stringify(rateAlerts));
+  }, [rateAlerts]);
+
+  // Helper to get current USD > ILS rate
+  const getUsdIlsRate = () => {
+    // Find USD and ILS rates (relative to USD)
+    const usdRate = exchangeRates.find(r => r.currency === 'USD')?.rate;
+    const ilsRate = exchangeRates.find(r => r.currency === 'ILS')?.rate;
+    if (!usdRate || !ilsRate) return null;
+    // 1 USD = (ILS rate / USD rate) ILS
+    return ilsRate / usdRate;
+  };
+
+  // Check alerts on every rate update
+  useEffect(() => {
+    const currentRate = getUsdIlsRate();
+    if (!currentRate) return;
+    rateAlerts.forEach((alert) => {
+      if (!alert.triggered && currentRate >= alert.threshold) {
+        addNotification({
+          type: 'rate-alert',
+          message: `USD/ILS rate reached ${currentRate.toFixed(3)} (alert: ${alert.threshold})`,
+          timestamp: new Date(),
+          icon: <Bell className="h-4 w-4 text-warning inline-block mr-1" />
+        });
+        // Mark as triggered
+        setRateAlerts((prev) => prev.map(a => a === alert ? { ...a, triggered: true } : a));
+      }
+    });
+  }, [exchangeRates]);
+
+  // Add alert handler
+  const handleAddRateAlert = () => {
+    const threshold = parseFloat(alertThreshold);
+    if (isNaN(threshold) || threshold <= 0) return;
+    setRateAlerts(prev => [...prev, { threshold, triggered: false }]);
+    setAlertThreshold("");
+  };
+
+  // Remove alert handler
+  const handleRemoveRateAlert = (idx) => {
+    setRateAlerts(prev => prev.filter((_, i) => i !== idx));
+  };
+
   const USERS = [
     { id: 1, email: 'user1@example.com' },
     { id: 2, email: 'user2@example.com' }
   ];
   const [selectedUser, setSelectedUser] = useState(USERS[0]);
+
+  // Add notification helper
+  const addNotification = (notif) => {
+    setNotifications((prev) => [
+      { ...notif, id: Date.now() },
+      ...prev.slice(0, 19) // keep max 20
+    ]);
+  };
+
+  // Theme toggle handler
+  const handleThemeToggle = (checked) => {
+    setIsDark(checked);
+    if (checked) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  };
 
   // Fetch balances
   const fetchBalances = async (userId = selectedUser.id) => {
@@ -219,6 +304,12 @@ export function CurrencyDashboard() {
       const data = await res.json();
       if (data.success) {
         toast({ title: "Deposit Successful", description: `Successfully deposited ${depositAmount} ${depositCurrency}` });
+        addNotification({
+          type: "deposit",
+          message: `Deposit of ${depositAmount} ${depositCurrency} completed`,
+          timestamp: new Date(),
+          icon: <Plus className="h-4 w-4 text-success inline-block mr-1" />
+        });
         setDepositAmount("");
         fetchBalances(selectedUser.id);
         fetchTransactions(selectedUser.id);
@@ -247,6 +338,12 @@ export function CurrencyDashboard() {
       const data = await res.json();
       if (data.success) {
         toast({ title: "Transfer Successful", description: `Sent ${transferAmount} ${transferCurrency} to ${recipientEmail}` });
+        addNotification({
+          type: "transfer",
+          message: `You transferred ${transferAmount} ${transferCurrency} to ${recipientEmail}`,
+          timestamp: new Date(),
+          icon: <Send className="h-4 w-4 text-primary inline-block mr-1" />
+        });
         setTransferAmount("");
         setRecipientEmail("");
         setIsTransferModalOpen(false);
@@ -266,7 +363,7 @@ export function CurrencyDashboard() {
     if (from === to) return 1;
     const fromRate = exchangeRates.find(r => r.currency === from)?.rate || 1;
     const toRate = exchangeRates.find(r => r.currency === to)?.rate || 1;
-    return toRate / fromRate;
+    return fromRate / toRate;
   };
 
   // Refresh rates
@@ -281,6 +378,23 @@ export function CurrencyDashboard() {
       const rate = getRate(currency, preferredCurrency);
       return total + (parseFloat(amount as any) * rate);
     }, 0);
+  };
+
+  // Helper to get the most recent historical rate for a currency to ILS
+  const getMostRecentHistoricalRate = (currency) => {
+    const hist = historicalRates[currency];
+    if (hist && hist.length > 0) {
+      // Use the last (most recent) entry
+      return hist[hist.length - 1].rate;
+    }
+    // Fallback to latest exchangeRates
+    if (currency === 'ILS') return 1;
+    const ilsRate = exchangeRates.find(r => r.currency === 'ILS')?.rate;
+    const curRate = exchangeRates.find(r => r.currency === currency)?.rate;
+    if (!ilsRate || !curRate) return null;
+    // Convert from USD-relative rates to ILS
+    // 1 unit of currency = (curRate / ilsRate) ILS
+    return curRate / ilsRate;
   };
 
   return (
@@ -329,14 +443,52 @@ export function CurrencyDashboard() {
                   <SelectItem value="ILS">ILS</SelectItem>
                 </SelectContent>
               </Select>
-              
-              <Button variant="ghost" size="icon">
-                <Settings className="h-4 w-4" />
-              </Button>
-              
-              <Button variant="ghost" size="icon">
-                <Bell className="h-4 w-4" />
-              </Button>
+              {/* Settings Modal and Trigger */}
+              <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="ghost" size="icon">
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-sm">
+                  <DialogHeader>
+                    <DialogTitle>Settings</DialogTitle>
+                  </DialogHeader>
+                  <div className="flex items-center justify-between py-2">
+                    <span>Dark Mode</span>
+                    <Switch checked={isDark} onCheckedChange={handleThemeToggle} />
+                  </div>
+                </DialogContent>
+              </Dialog>
+              {/* Notification Button */}
+              <Popover open={isNotifOpen} onOpenChange={setIsNotifOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="icon">
+                    <Bell className="h-4 w-4" />
+                    {notifications.length > 0 && (
+                      <span className="absolute top-1 right-1 inline-block w-2 h-2 bg-success rounded-full" />
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-80 p-0">
+                  <div className="p-4 border-b font-bold">Notifications</div>
+                  <div className="max-h-64 overflow-y-auto divide-y">
+                    {notifications.length === 0 ? (
+                      <div className="p-4 text-muted-foreground text-center">No notifications</div>
+                    ) : (
+                      notifications.map(n => (
+                        <div key={n.id} className="flex items-start gap-2 p-3 hover:bg-muted/50 transition-all">
+                          {n.icon}
+                          <div>
+                            <div className="font-medium">{n.message}</div>
+                            <div className="text-xs text-muted-foreground">{format(new Date(n.timestamp), 'PPpp')}</div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
         </div>
@@ -384,6 +536,16 @@ export function CurrencyDashboard() {
                 <div className="text-2xl font-bold">
                   {showBalances ? amount.toLocaleString() : "••••"}
                 </div>
+                {/* Converted value in preferred currency, if different */}
+                {showBalances && currency !== 'ILS' && (
+                  <div className="text-xs text-muted-foreground mt-1">
+                    ≈ {currencyFlags['ILS']} {(() => {
+                      const rate = getMostRecentHistoricalRate(currency);
+                      if (!rate) return '...';
+                      return (parseFloat(amount as any) * rate).toLocaleString(undefined, { maximumFractionDigits: 2 });
+                    })()} ILS
+                  </div>
+                )}
                 <Progress value={65} className="mt-2 h-2" />
               </CardContent>
             </Card>
@@ -651,18 +813,28 @@ export function CurrencyDashboard() {
                     value={alertThreshold}
                     onChange={(e) => setAlertThreshold(e.target.value)}
                   />
-                  <Button variant="warning" size="sm">
+                  <Button variant="warning" size="sm" onClick={handleAddRateAlert}>
                     <Bell className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
 
-              <Alert>
-                <Bell className="h-4 w-4" />
-                <AlertDescription>
-                  You have 2 active rate alerts set
-                </AlertDescription>
-              </Alert>
+              {/* List active alerts */}
+              {rateAlerts.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {rateAlerts.map((alert, idx) => (
+                    <div key={idx} className="flex items-center text-xs text-muted-foreground bg-muted/50 rounded px-2 py-1 justify-between">
+                      <span>
+                        <Bell className="h-3 w-3 inline-block mr-1 text-warning" />
+                        Alert at {alert.threshold} ILS {alert.triggered && <span className="ml-1 text-success">(triggered)</span>}
+                      </span>
+                      <Button variant="ghost" size="icon" className="h-5 w-5 p-0 ml-2" onClick={() => handleRemoveRateAlert(idx)}>
+                        ×
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

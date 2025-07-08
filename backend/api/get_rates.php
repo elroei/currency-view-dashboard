@@ -15,6 +15,7 @@ $rates = [
     'USD' => 1.0,
     'EUR' => 0.92,
     'GBP' => 0.78,
+    'ILS' => 0.27, // 1 ILS = 0.27 USD
     'JPY' => 155.0
 ];
 echo json_encode(['rates' => $rates, 'base' => 'USD']); 

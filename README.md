@@ -10,7 +10,7 @@
 
 ---
 
-A modern, multi-user currency wallet system supporting USD, EUR, GBP, and Israeli Shekel (ILS).  
+A modern, multi-user currency wallet system supporting USD, EUR, GBP, and Israeli Shekel (ILS).
 Built with React (Vite + TailwindCSS), PHP (Apache), MySQL, and Docker for zero-effort local setup.
 
 ---
@@ -31,7 +31,7 @@ docker-compose up --build
 **3. Access the app:**
 - **Frontend:** [http://localhost:3000](http://localhost:3000)
 - **Backend API:** [http://localhost:8000/api/](http://localhost:8000/api/)
-- **phpMyAdmin:** [http://localhost:8081](http://localhost:8081)  
+- **phpMyAdmin:** [http://localhost:8081](http://localhost:8081)
   (Login: `wallet_user` / `wallet_pass`, Server: `db`)
 
 ---
@@ -81,10 +81,35 @@ All endpoints return JSON and support CORS.
 
 ---
 
-## 💱 Currency Support
+## 💱 Currency & Exchange Rate Features
 
 - **Supported:** USD, EUR, GBP, ILS (Israeli Shekel)
 - All wallet operations and balances support ILS natively.
+- **Live exchange rates** are fetched from the backend and displayed in the dashboard.
+- **Historical Exchange Rates:**
+  - The dashboard displays a chart of historical rates (USD/EUR/GBP to ILS) for the last 3 months.
+  - The most recent historical rate is used for equivalent value calculations, ensuring consistency across the dashboard.
+
+---
+
+## 📈 Dashboard Features
+
+- **Modern, responsive UI** with TailwindCSS and custom design.
+- **Theme toggle:** Light/dark mode available in the settings panel.
+- **In-app notifications:**
+  - All important actions (deposits, transfers, rate alerts) trigger notifications in the UI.
+- **Rate Alerts:**
+  - Set custom alerts for the USD > ILS exchange rate.
+  - Alerts are saved in your browser and persist across reloads.
+  - When the rate meets or exceeds your threshold, you receive an in-app notification.
+  - Manage (add/remove) active alerts in the dashboard.
+- **Currency conversion:**
+  - Each currency card shows the original amount and the equivalent in ILS, calculated using the most recent historical rate.
+  - The total wallet balance is always shown in your selected display currency, with all conversions based on the latest rates.
+- **Transaction history:**
+  - View all recent transactions, including deposits and transfers, with equivalent values in ILS.
+- **Quick deposit and transfer:**
+  - Instantly add funds or transfer between users with a simple, intuitive UI.
 
 ---
 
@@ -95,7 +120,7 @@ All endpoints return JSON and support CORS.
   docker-compose down -v
   docker-compose up --build
   ```
-- **To add more sample data:**  
+- **To add more sample data:**
   Edit [`backend/init.sql`](backend/init.sql) and re-run the above reset.
 
 - **Backend environment variables** (see `backend/config.php`):
@@ -106,18 +131,18 @@ All endpoints return JSON and support CORS.
 
 ## 📝 Notes
 
-- **No manual setup required:**  
+- **No manual setup required:**
   Just run `docker-compose up --build` and everything is ready.
 - **phpMyAdmin** is available for DB inspection and manual queries.
 - **Frontend** is served on port 3000, backend API on 8000, phpMyAdmin on 8081.
+- **Favicon:** To change the site icon, replace `frontend/public/favicon.png` and update the link in `frontend/index.html`.
 
 ---
 
 ## 📄 License
-
-MIT (or your preferred license)
+elroei seadia
 
 ---
 
-**Enjoy your full-stack, multi-currency wallet!**  
+**Enjoy your full-stack, multi-currency wallet!**
 If you have questions or want to contribute, open an issue or pull request.
