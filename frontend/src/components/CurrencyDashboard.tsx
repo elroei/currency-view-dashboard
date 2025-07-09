@@ -1,5 +1,5 @@
-import React from "react";
-import { useState, useEffect, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
@@ -25,7 +25,11 @@ import {
   EyeOff,
   Plus,
   History,
-  Calendar
+  Calendar,
+  ChevronDown,
+  User,
+  KeyRound,
+  LogOut
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -35,6 +39,10 @@ import { addDays, subDays, subMonths, subYears, format as formatDate, startOfWee
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { fetchBoiHistoricalRates } from "@/lib/utils";
 import { Calendar as DateRangePicker } from "@/components/ui/calendar";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerClose } from "@/components/ui/drawer";
+import { useTranslation } from "@/lib/i18n";
 
 // Mock data - In production, this would come from your PHP backend APIs
 const mockBalances = {
@@ -161,12 +169,6 @@ export function CurrencyDashboard() {
     setRateAlerts(prev => prev.filter((_, i) => i !== idx));
   };
 
-  const USERS = [
-    { id: 1, email: 'user1@example.com' },
-    { id: 2, email: 'user2@example.com' }
-  ];
-  const [selectedUser, setSelectedUser] = useState(USERS[0]);
-
   // Add notification helper
   const addNotification = (notif) => {
     setNotifications((prev) => [
@@ -186,7 +188,7 @@ export function CurrencyDashboard() {
   };
 
   // Fetch balances
-  const fetchBalances = async (userId = selectedUser.id) => {
+  const fetchBalances = async (userId = user?.id) => {
     try {
       const res = await fetch("/api/balance.php", {
         method: "POST",
@@ -213,7 +215,7 @@ export function CurrencyDashboard() {
   };
 
   // Fetch transactions
-  const fetchTransactions = async (userId = selectedUser.id) => {
+  const fetchTransactions = async (userId = user?.id) => {
     try {
       const res = await fetch("/api/transactions.php", {
         method: "POST",
@@ -225,6 +227,27 @@ export function CurrencyDashboard() {
     } catch (e) {
       toast({ title: "Failed to load transactions", variant: "destructive" });
     }
+  };
+
+  const [user, setUser] = useState(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    fetch("/api/me.php")
+      .then(res => res.json())
+      .then(data => {
+        if (data.loggedIn) {
+          setUser(data.user);
+        } else {
+          setUser(null);
+        }
+      });
+  }, []);
+
+  const handleLogout = async () => {
+    await fetch("/api/logout.php", { method: "POST" });
+    setUser(null);
+    navigate("/login");
   };
 
   const [dateRange, setDateRange] = useState<{ from: Date; to?: Date } | undefined>(() => ({
@@ -292,18 +315,18 @@ export function CurrencyDashboard() {
 
   // Initial load
   useEffect(() => {
-    fetchBalances(selectedUser.id);
+    fetchBalances(user?.id);
     fetchExchangeRates();
-    fetchTransactions(selectedUser.id);
+    fetchTransactions(user?.id);
     // eslint-disable-next-line
   }, []);
 
   // Re-fetch on user change
   useEffect(() => {
-    fetchBalances(selectedUser.id);
-    fetchTransactions(selectedUser.id);
+    fetchBalances(user?.id);
+    fetchTransactions(user?.id);
     // eslint-disable-next-line
-  }, [selectedUser]);
+  }, [user]);
 
   // Deposit handler
   const handleDeposit = async () => {
@@ -316,7 +339,7 @@ export function CurrencyDashboard() {
       const res = await fetch("/api/deposit.php", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: selectedUser.id, amount: depositAmount, currency: depositCurrency })
+        body: JSON.stringify({ user_id: user?.id, amount: depositAmount, currency: depositCurrency })
       });
       const data = await res.json();
       if (data.success) {
@@ -328,8 +351,8 @@ export function CurrencyDashboard() {
           icon: <Plus className="h-4 w-4 text-success inline-block mr-1" />
         });
         setDepositAmount("");
-        fetchBalances(selectedUser.id);
-        fetchTransactions(selectedUser.id);
+        fetchBalances(user?.id);
+        fetchTransactions(user?.id);
       } else {
         toast({ title: "Deposit Failed", description: data.error || "Please try again later.", variant: "destructive" });
       }
@@ -340,17 +363,59 @@ export function CurrencyDashboard() {
   };
 
   // Transfer handler
-  const handleTransfer = async () => {
+  const handleTransfer = async (e) => {
+    e.preventDefault();
     if (!transferAmount || !transferCurrency || !recipientEmail) {
       toast({ title: "Missing Information", description: "Please fill in all transfer fields.", variant: "destructive" });
       return;
     }
     setLoading(true);
+    setPendingTransfer({
+      recipientEmail,
+      transferAmount,
+      transferCurrency,
+    });
+    setShowTransferPw(true);
+    setTransferPw("");
+    setTransferPwError("");
+  };
+
+  // New function to verify password and proceed with transfer
+  const confirmTransferWithPassword = async () => {
+    setTransferPwError("");
+    setTransferPwLoading(true);
+    try {
+      const res = await fetch("/api/verify_password.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: transferPw })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setTransferPwError(t('incorrectPassword'));
+        setTransferPwLoading(false);
+        return;
+      }
+      // Password correct, proceed with transfer
+      setShowTransferPw(false);
+      setTransferPw("");
+      setTransferPwError("");
+      setTransferPwLoading(false);
+      // Actually perform the transfer (reuse original transfer logic)
+      await actuallyPerformTransfer();
+    } catch {
+      setTransferPwError(t('networkError'));
+      setTransferPwLoading(false);
+    }
+  };
+
+  // Move the original transfer logic to a new function
+  const actuallyPerformTransfer = async () => {
     try {
       const res = await fetch("/api/transfer.php", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sender_user_id: selectedUser.id, recipient_email: recipientEmail, amount: transferAmount, currency: transferCurrency, rate: getRate(transferCurrency, transferCurrency) })
+        body: JSON.stringify({ sender_user_id: user?.id, recipient_email: recipientEmail, amount: transferAmount, currency: transferCurrency, rate: getRate(transferCurrency, transferCurrency) })
       });
       const data = await res.json();
       if (data.success) {
@@ -364,8 +429,8 @@ export function CurrencyDashboard() {
         setTransferAmount("");
         setRecipientEmail("");
         setIsTransferModalOpen(false);
-        fetchBalances(selectedUser.id);
-        fetchTransactions(selectedUser.id);
+        fetchBalances(user?.id);
+        fetchTransactions(user?.id);
       } else {
         toast({ title: "Transfer Failed", description: data.error || "Please try again later.", variant: "destructive" });
       }
@@ -434,109 +499,94 @@ export function CurrencyDashboard() {
   const allCurrencies = Array.from(new Set([...(exchangeRates.map(r => r.currency)), "ILS"]));
   const [baseCurrency, setBaseCurrency] = useState("ILS");
 
+  const [showChangePw, setShowChangePw] = useState(false);
+  const [currentPw, setCurrentPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [pwLoading, setPwLoading] = useState(false);
+  const [pwError, setPwError] = useState("");
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setPwError("");
+    if (newPw.length < 6 || !/[A-Za-z]/.test(newPw) || !/\d/.test(newPw)) {
+      setPwError("Password must be at least 6 characters and include a letter and a digit");
+      return;
+    }
+    if (newPw !== confirmPw) {
+      setPwError("Passwords do not match");
+      return;
+    }
+    setPwLoading(true);
+    try {
+      const res = await fetch("/api/change_password.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ current_password: currentPw, new_password: newPw })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast({ title: "Password changed successfully", variant: "default" });
+        setShowChangePw(false);
+        setCurrentPw(""); setNewPw(""); setConfirmPw("");
+      } else {
+        setPwError(data.error || "Change failed");
+      }
+    } catch {
+      setPwError("Network error");
+    }
+    setPwLoading(false);
+  };
+
+  const [showProfile, setShowProfile] = useState(false);
+  const [profileTab, setProfileTab] = useState("profile");
+
+  const { t, lang, setLang } = useTranslation();
+
+  // Add state for transfer password modal
+  const [showTransferPw, setShowTransferPw] = useState(false);
+  const [transferPw, setTransferPw] = useState("");
+  const [transferPwError, setTransferPwError] = useState("");
+  const [pendingTransfer, setPendingTransfer] = useState(null);
+  const [transferPwLoading, setTransferPwLoading] = useState(false);
+
   return (
-    <div className="min-h-screen bg-background">
-      {/* User Selector */}
-      <div className="container mx-auto px-4 pt-6 pb-2 flex flex-col md:flex-row md:items-center md:justify-between">
-        <div className="mb-2 md:mb-0">
-          <label htmlFor="user-select" className="me-2 fw-bold">Select User:</label>
-          <select
-            id="user-select"
-            className="form-select"
-            value={selectedUser.id}
-            onChange={e => {
-              const user = USERS.find(u => u.id === Number(e.target.value));
-              if (user) setSelectedUser(user);
-            }}
-            style={{ width: 260, display: 'inline-block' }}
-          >
-            {USERS.map(user => (
-              <option key={user.id} value={user.id}>{user.email}</option>
-            ))}
-          </select>
-        </div>
-        <div className="text-muted-foreground text-sm">Current user: <span className="fw-bold">{selectedUser.email}</span></div>
+    <div className="min-h-screen bg-gradient-to-br from-primary/30 to-accent/10">
+      {/* Header with user info and logout */}
+      <div className="flex items-center justify-between px-8 py-6">
+        <div className="text-2xl font-extrabold tracking-tight text-primary drop-shadow-sm">💱 Currency Wallet</div>
+        {user && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex items-center gap-3 bg-white/60 dark:bg-zinc-900/60 backdrop-blur-md shadow-lg rounded-full px-5 py-2 hover:ring-2 hover:ring-primary/30 transition-all">
+                <div className="text-sm text-muted-foreground text-left">
+                  <div className="font-bold text-primary">{user.name}</div>
+                  <div className="text-xs">{user.email}</div>
+                </div>
+                <ChevronDown className="h-4 w-4 text-primary" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-[180px] bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md shadow-xl rounded-xl p-2">
+              <DropdownMenuItem onClick={() => setShowProfile(true)} className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-accent/20 cursor-pointer">
+                <User className="h-4 w-4 text-primary" /> Profile / Settings
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowChangePw(true)} className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-accent/20 cursor-pointer">
+                <KeyRound className="h-4 w-4 text-primary" /> Change Password
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleLogout} className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 cursor-pointer">
+                <LogOut className="h-4 w-4" /> Logout
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
-      {/* Header */}
-      <header className="border-b border-border bg-card shadow-card">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                <Wallet className="h-8 w-8 text-primary" />
-                <h1 className="text-2xl font-bold text-foreground">Currency Wallet</h1>
-              </div>
-            </div>
-            
-            <div className="flex items-center space-x-4">
-              <Select value={preferredCurrency} onValueChange={setPreferredCurrency}>
-                <SelectTrigger className="w-24">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="USD">USD</SelectItem>
-                  <SelectItem value="EUR">EUR</SelectItem>
-                  <SelectItem value="GBP">GBP</SelectItem>
-                  <SelectItem value="ILS">ILS</SelectItem>
-                </SelectContent>
-              </Select>
-              {/* Settings Modal and Trigger */}
-              <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="ghost" size="icon">
-                    <Settings className="h-4 w-4" />
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-sm">
-                  <DialogHeader>
-                    <DialogTitle>Settings</DialogTitle>
-                  </DialogHeader>
-                  <div className="flex items-center justify-between py-2">
-                    <span>Dark Mode</span>
-                    <Switch checked={isDark} onCheckedChange={handleThemeToggle} />
-                  </div>
-                </DialogContent>
-              </Dialog>
-              {/* Notification Button */}
-              <Popover open={isNotifOpen} onOpenChange={setIsNotifOpen}>
-                <PopoverTrigger asChild>
-                  <Button variant="ghost" size="icon">
-                    <Bell className="h-4 w-4" />
-                    {notifications.length > 0 && (
-                      <span className="absolute top-1 right-1 inline-block w-2 h-2 bg-success rounded-full" />
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="end" className="w-80 p-0">
-                  <div className="p-4 border-b font-bold">Notifications</div>
-                  <div className="max-h-64 overflow-y-auto divide-y">
-                    {notifications.length === 0 ? (
-                      <div className="p-4 text-muted-foreground text-center">No notifications</div>
-                    ) : (
-                      notifications.map(n => (
-                        <div key={n.id} className="flex items-start gap-2 p-3 hover:bg-muted/50 transition-all">
-                          {n.icon}
-                          <div>
-                            <div className="font-medium">{n.message}</div>
-                            <div className="text-xs text-muted-foreground">{format(new Date(n.timestamp), 'PPpp')}</div>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </div>
-          </div>
-        </div>
-      </header>
 
       <div className="container mx-auto px-4 py-8 space-y-8">
         {/* Balance Overview */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
           <Card className="lg:col-span-2 bg-gradient-card shadow-elevated">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Balance</CardTitle>
+              <CardTitle className="text-sm font-medium">{t('totalBalance')}</CardTitle>
               <Button
                 variant="ghost"
                 size="icon"
@@ -595,16 +645,16 @@ export function CurrencyDashboard() {
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <Plus className="h-5 w-5 text-success" />
-                <span>Quick Deposit</span>
+                <span>{t('quickDeposit')}</span>
               </CardTitle>
               <CardDescription>
-                Add funds to your wallet instantly
+                {t('addFunds')}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="amount">Amount</Label>
+                  <Label htmlFor="amount">{t('amount')}</Label>
                   <Input
                     id="amount"
                     type="number"
@@ -614,7 +664,7 @@ export function CurrencyDashboard() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="currency">Currency</Label>
+                  <Label htmlFor="currency">{t('currency')}</Label>
                   <Select value={depositCurrency} onValueChange={setDepositCurrency}>
                     <SelectTrigger>
                       <SelectValue />
@@ -644,8 +694,8 @@ export function CurrencyDashboard() {
           <Card className="bg-gradient-card shadow-card">
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
-                <CardTitle>Exchange Rates</CardTitle>
-                <CardDescription>Current rates per 1 {baseCurrency}</CardDescription>
+                <CardTitle>{t('exchangeRates')}</CardTitle>
+                <CardDescription>{t('currentRates')}</CardDescription>
               </div>
               <Button variant="ghost" size="icon" onClick={refreshRates}>
                 <RefreshCw className="h-4 w-4" />
@@ -653,7 +703,7 @@ export function CurrencyDashboard() {
             </CardHeader>
             <CardContent>
               <div className="mb-2 flex items-center gap-2">
-                <Label htmlFor="base-currency">Base Currency:</Label>
+                <Label htmlFor="base-currency">{t('baseCurrency')}:</Label>
                 <Select value={baseCurrency} onValueChange={setBaseCurrency}>
                   <SelectTrigger className="w-24">
                     <SelectValue />
@@ -706,8 +756,8 @@ export function CurrencyDashboard() {
           <CardHeader>
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div>
-                <CardTitle>Historical Exchange Rates</CardTitle>
-                <CardDescription>Track currency performance over time</CardDescription>
+                <CardTitle>{t('historicalExchangeRates')}</CardTitle>
+                <CardDescription>{t('trackCurrencyPerformance')}</CardDescription>
               </div>
               <div className="flex flex-col md:flex-row gap-2 items-center">
                 <Select value={selectedCurrencyChart} onValueChange={setSelectedCurrencyChart}>
@@ -715,9 +765,9 @@ export function CurrencyDashboard() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="USD">USD/ILS</SelectItem>
-                    <SelectItem value="EUR">EUR/ILS</SelectItem>
-                    <SelectItem value="GBP">GBP/ILS</SelectItem>
+                    <SelectItem value="USD">{t('usdIls')}</SelectItem>
+                    <SelectItem value="EUR">{t('eurIls')}</SelectItem>
+                    <SelectItem value="GBP">{t('gbpIls')}</SelectItem>
                   </SelectContent>
                 </Select>
                 <div className="flex gap-1">
@@ -749,7 +799,7 @@ export function CurrencyDashboard() {
             </div>
             {activeRange === 'custom' && (
               <div className="mt-2 flex flex-col md:flex-row gap-2 items-center">
-                <span className="text-xs text-muted-foreground">Custom Range:</span>
+                <span className="text-xs text-muted-foreground">{t('customRange')}:</span>
                 <DateRangePicker
                   mode="range"
                   selected={dateRange}
@@ -767,7 +817,7 @@ export function CurrencyDashboard() {
           <CardContent>
             <div className="h-80 flex items-center justify-center bg-white/60 dark:bg-zinc-900/60 rounded-3xl shadow-xl p-6">
               {historicalLoading ? (
-                <span className="text-muted-foreground">Loading...</span>
+                <span className="text-muted-foreground">{t('loadingHistoricalRates')}</span>
               ) : historicalError ? (
                 <span className="text-destructive">{historicalError}</span>
               ) : (filteredRates.length > 0 ? (
@@ -834,7 +884,7 @@ export function CurrencyDashboard() {
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
-                <span className="text-muted-foreground">No data available for this range.</span>
+                <span className="text-muted-foreground">{t('noDataAvailable')}</span>
               ))}
             </div>
           </CardContent>
@@ -847,20 +897,20 @@ export function CurrencyDashboard() {
               <div>
                 <CardTitle className="flex items-center space-x-2">
                   <History className="h-5 w-5" />
-                  <span>Recent Transactions</span>
+                  <span>{t('recentTransactions')}</span>
                 </CardTitle>
-                <CardDescription>Your latest wallet activity</CardDescription>
+                <CardDescription>{t('yourLatestWalletActivity')}</CardDescription>
               </div>
-              <Badge variant="secondary">{transactions.length} transactions</Badge>
+              <Badge variant="secondary">{transactions.length} {t('transactions')}</Badge>
             </CardHeader>
             <CardContent>
               <Table className="rounded-2xl overflow-hidden shadow-xl">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Equivalent (ILS)</TableHead>
+                    <TableHead>{t('date')}</TableHead>
+                    <TableHead>{t('type')}</TableHead>
+                    <TableHead>{t('amount')}</TableHead>
+                    <TableHead>{t('equivalentIls')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -870,9 +920,13 @@ export function CurrencyDashboard() {
                       <TableCell>
                         <Badge variant={transaction.type === 'deposit' ? 'default' : 'secondary'}>
                           {transaction.type === 'deposit' ? (
-                            <><ArrowDownRight className="h-3 w-3 mr-1" />{transaction.type}</>
+                            <>
+                              <ArrowDownRight className="h-3 w-3 mr-1" />{t('deposit')}
+                            </>
                           ) : (
-                            <><ArrowUpRight className="h-3 w-3 mr-1" />{transaction.type}</>
+                            <>
+                              <ArrowUpRight className="h-3 w-3 mr-1" />{t('transfer')}
+                            </>
                           )}
                         </Badge>
                       </TableCell>
@@ -891,7 +945,7 @@ export function CurrencyDashboard() {
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <Send className="h-5 w-5 text-accent" />
-                <span>Quick Actions</span>
+                <span>{t('quickActions')}</span>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -904,14 +958,14 @@ export function CurrencyDashboard() {
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>Send Money to User</DialogTitle>
+                    <DialogTitle>{t('sendMoney')}</DialogTitle>
                     <DialogDescription>
-                      Transfer funds to another wallet user
+                      {t('transferFunds')}
                     </DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="recipient">Recipient Email</Label>
+                      <Label htmlFor="recipient">{t('recipientEmail')}</Label>
                       <Input
                         id="recipient"
                         type="email"
@@ -922,7 +976,7 @@ export function CurrencyDashboard() {
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="transfer-amount">Amount</Label>
+                        <Label htmlFor="transfer-amount">{t('amount')}</Label>
                         <Input
                           id="transfer-amount"
                           type="number"
@@ -932,7 +986,7 @@ export function CurrencyDashboard() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="transfer-currency">Currency</Label>
+                        <Label htmlFor="transfer-currency">{t('currency')}</Label>
                         <Select value={transferCurrency} onValueChange={setTransferCurrency}>
                           <SelectTrigger>
                             <SelectValue />
@@ -948,7 +1002,7 @@ export function CurrencyDashboard() {
                       </div>
                     </div>
                     <Button onClick={handleTransfer} className="w-full" variant="financial" disabled={loading}>
-                      {loading ? "Sending..." : "Send Transfer"}
+                      {loading ? t('sending') : t('sendTransfer')}
                     </Button>
                   </div>
                 </DialogContent>
@@ -957,7 +1011,7 @@ export function CurrencyDashboard() {
               <Separator />
 
               <div className="space-y-2">
-                <Label htmlFor="alert-currency">Rate Alert</Label>
+                <Label htmlFor="alert-currency">{t('rateAlert')}</Label>
                 <div className="flex space-x-2">
                   <Select value={alertCurrency} onValueChange={setAlertCurrency}>
                     <SelectTrigger className="w-24">
@@ -991,7 +1045,7 @@ export function CurrencyDashboard() {
                     <div key={idx} className="flex items-center text-xs text-muted-foreground bg-muted/50 rounded px-2 py-1 justify-between">
                       <span>
                         <Bell className="h-3 w-3 inline-block mr-1 text-warning" />
-                        Alert for {alert.currency} &gt; ILS at {alert.threshold} ILS {alert.triggered && <span className="ml-1 text-success">(triggered)</span>}
+                        {t('alertFor')} {alert.currency} &gt; ILS {t('at')} {alert.threshold} ILS {alert.triggered && <span className="ml-1 text-success">(triggered)</span>}
                       </span>
                       <Button variant="ghost" size="icon" className="h-5 w-5 p-0 ml-2" onClick={() => handleRemoveRateAlert(idx)}>
                         ×
@@ -1004,6 +1058,119 @@ export function CurrencyDashboard() {
           </Card>
         </div>
       </div>
+
+      <Dialog open={showChangePw} onOpenChange={setShowChangePw}>
+        <DialogContent className="max-w-md bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md rounded-2xl shadow-2xl">
+          <DialogHeader>
+            <DialogTitle>{t('changePassword')}</DialogTitle>
+            <DialogDescription>{t('enterCurrentPasswordAndNewPassword')}</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleChangePassword} className="space-y-4">
+            <div>
+              <label className="block mb-1 font-medium">{t('currentPassword')}</label>
+              <Input type="password" value={currentPw} onChange={e => setCurrentPw(e.target.value)} required autoFocus />
+            </div>
+            <div>
+              <label className="block mb-1 font-medium">{t('newPassword')}</label>
+              <Input type="password" value={newPw} onChange={e => setNewPw(e.target.value)} required />
+            </div>
+            <div>
+              <label className="block mb-1 font-medium">{t('confirmNewPassword')}</label>
+              <Input type="password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} required />
+            </div>
+            {pwError && <div className="text-red-500 text-sm text-center">{pwError}</div>}
+            <DialogFooter>
+              <Button type="submit" className="w-full rounded-full bg-gradient-to-r from-primary to-accent shadow-lg text-lg font-bold py-2" disabled={pwLoading}>
+                {pwLoading ? "Changing..." : "Change Password"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showTransferPw} onOpenChange={setShowTransferPw}>
+        <DialogContent className="max-w-md bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md rounded-2xl shadow-2xl">
+          <DialogHeader>
+            <DialogTitle>{t('confirmTransfer')}</DialogTitle>
+            <DialogDescription>{t('enterPasswordToConfirm')}</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={e => { e.preventDefault(); confirmTransferWithPassword(); }} className="space-y-4">
+            <div>
+              <label className="block mb-1 font-medium">{t('password')}</label>
+              <Input type="password" value={transferPw} onChange={e => setTransferPw(e.target.value)} required autoFocus />
+            </div>
+            {transferPwError && <div className="text-red-500 text-sm text-center">{transferPwError}</div>}
+            <DialogFooter>
+              <Button type="submit" className="w-full rounded-full bg-gradient-to-r from-primary to-accent shadow-lg text-lg font-bold py-2" disabled={transferPwLoading}>
+                {transferPwLoading ? t('verifying') : t('confirm')}
+              </Button>
+              <Button type="button" variant="ghost" className="w-full mt-2" onClick={() => setShowTransferPw(false)}>
+                {t('cancel')}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Drawer open={showProfile} onOpenChange={setShowProfile}>
+        <DrawerContent className="max-w-lg mx-auto bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md rounded-2xl shadow-2xl p-0">
+          <DrawerHeader className="px-8 pt-8 pb-2">
+            <DrawerTitle className="text-2xl font-extrabold tracking-tight text-primary drop-shadow-sm">{t('profileSettings')}</DrawerTitle>
+            <DrawerDescription className="text-base text-muted-foreground mt-1 mb-2">{t('manageAccountAndPreferences')}</DrawerDescription>
+          </DrawerHeader>
+          <Tabs value={profileTab} onValueChange={setProfileTab} className="px-8 pb-8 pt-2">
+            <TabsList className="mb-6">
+              <TabsTrigger value="profile">{t('profile')}</TabsTrigger>
+              <TabsTrigger value="preferences">{t('preferences')}</TabsTrigger>
+              <TabsTrigger value="activity">{t('activityLog')}</TabsTrigger>
+            </TabsList>
+            <TabsContent value="profile">
+              {/* Editable profile info placeholder */}
+              <div className="space-y-4">
+                <div>
+                  <label className="block mb-1 font-medium">{t('name')}</label>
+                  <Input type="text" value={user?.name || ""} disabled className="rounded-full" />
+                </div>
+                <div>
+                  <label className="block mb-1 font-medium">{t('email')}</label>
+                  <Input type="email" value={user?.email || ""} disabled className="rounded-full" />
+                </div>
+                <Button className="rounded-full mt-2" disabled>{t('saveChangesComingSoon')}</Button>
+              </div>
+            </TabsContent>
+            <TabsContent value="preferences">
+              {/* Theme and language preferences placeholder */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">{t('theme')}</span>
+                  <Switch checked={isDark} onCheckedChange={handleThemeToggle} />
+                </div>
+                <div>
+                  <label className="block mb-1 font-medium">{t('language')}</label>
+                  <Select value={lang} onValueChange={setLang}>
+                    <SelectTrigger className="w-32 rounded-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="en">{t('english')}</SelectItem>
+                      <SelectItem value="he">{t('hebrew')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </TabsContent>
+            <TabsContent value="activity">
+              {/* Activity log placeholder */}
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                <div className="text-muted-foreground text-center py-8">{t('activityLogComingSoon')}</div>
+              </div>
+            </TabsContent>
+          </Tabs>
+          <DrawerClose asChild>
+            <Button variant="ghost" className="absolute top-4 right-4 rounded-full">{t('close')}</Button>
+          </DrawerClose>
+        </DrawerContent>
+      </Drawer>
     </div>
   );
 }

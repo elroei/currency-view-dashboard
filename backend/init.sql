@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     email VARCHAR(255) NOT NULL UNIQUE,
     name VARCHAR(255),
+    password VARCHAR(255) NOT NULL, -- bcrypt hash
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -30,9 +31,9 @@ CREATE TABLE IF NOT EXISTS historical_exchange_rates (
 );
 
 -- Seed users
-INSERT INTO users (id, email, name) VALUES
-  (1, 'user1@example.com', 'User One'),
-  (2, 'user2@example.com', 'User Two')
+INSERT INTO users (id, email, name, password) VALUES
+  (1, 'user1@example.com', 'User One', '$2y$12$33Mjnmpl6pbz56NXDM16Wus.m6MS2SXU8nYKJQ4QE2zG/3qHgFoYC'),
+  (2, 'user2@example.com', 'User Two', '$2y$12$33Mjnmpl6pbz56NXDM16Wus.m6MS2SXU8nYKJQ4QE2zG/3qHgFoYC')
 ON DUPLICATE KEY UPDATE email=email;
 
 -- Seed initial balances as deposits for user1

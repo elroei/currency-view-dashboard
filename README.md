@@ -36,6 +36,18 @@ docker-compose up --build
 
 ---
 
+## 👥 Default Users
+
+Upon running the project, the following users are available for testing:
+
+- **user1@example.com** / `demo123`  
+  - Initial balance: USD 1000, EUR 500, ILS 2000
+
+- **user2@example.com** / `demo123`  
+  - Initial balance: USD 0, EUR 0, ILS 0
+
+---
+
 ## 🗄️ Database & Seeding
 
 - **MySQL 8.0** container auto-creates the `wallet` database.
@@ -45,6 +57,15 @@ docker-compose up --build
     - `user1@example.com` (id: 1, initial: USD 1000, EUR 500, ILS 2000)
     - `user2@example.com` (id: 2, initial: USD 0, EUR 0, ILS 0)
 - **No manual SQL or DB creation required.**
+
+---
+
+## 🔐 Authentication & Security
+
+- **Session-based authentication:** Secure login/logout with PHP sessions. Only authenticated users can access the dashboard and perform actions.
+- **User-specific dashboard:** All balances, transactions, and actions are tied to the currently logged-in user. No manual user selection.
+- **Password confirmation for transfers:** Before sending money, users must re-enter their password for extra security.
+- **Change password:** Users can securely change their password from the profile/settings modal.
 
 ---
 
@@ -95,21 +116,18 @@ All endpoints return JSON and support CORS.
 ## 📈 Dashboard Features
 
 - **Modern, responsive UI** with TailwindCSS and custom design.
+- **Session-based login/logout:** Only authenticated users can access the dashboard.
+- **User-specific data:** Balances, transactions, and actions reflect the logged-in user only.
+- **Profile & Settings modal:** Edit profile info, change password, set preferences, and view activity log in a modern glassy modal.
+- **Change password:** Securely update your password from the settings modal.
+- **Language support:** Instantly switch between English and Hebrew throughout the UI.
+- **Password confirmation before transfers:** Extra security step before sending money.
 - **Theme toggle:** Light/dark mode available in the settings panel.
-- **In-app notifications:**
-  - All important actions (deposits, transfers, rate alerts) trigger notifications in the UI.
-- **Rate Alerts:**
-  - Set custom alerts for the USD > ILS exchange rate.
-  - Alerts are saved in your browser and persist across reloads.
-  - When the rate meets or exceeds your threshold, you receive an in-app notification.
-  - Manage (add/remove) active alerts in the dashboard.
-- **Currency conversion:**
-  - Each currency card shows the original amount and the equivalent in ILS, calculated using the most recent historical rate.
-  - The total wallet balance is always shown in your selected display currency, with all conversions based on the latest rates.
-- **Transaction history:**
-  - View all recent transactions, including deposits and transfers, with equivalent values in ILS.
-- **Quick deposit and transfer:**
-  - Instantly add funds or transfer between users with a simple, intuitive UI.
+- **In-app notifications:** All important actions (deposits, transfers, rate alerts) trigger notifications in the UI.
+- **Rate Alerts:** Set custom alerts for exchange rates. Alerts are saved in your browser and persist across reloads. When the rate meets or exceeds your threshold, you receive an in-app notification. Manage (add/remove) active alerts in the dashboard.
+- **Currency conversion:** Each currency card shows the original amount and the equivalent in ILS, calculated using the most recent historical rate. The total wallet balance is always shown in your selected display currency, with all conversions based on the latest rates.
+- **Transaction history:** View all recent transactions, including deposits and transfers, with equivalent values in ILS.
+- **Quick deposit and transfer:** Instantly add funds or transfer between users with a simple, intuitive UI.
 
 ---
 

@@ -1,5 +1,6 @@
 <?php
 // transfer.php - Handles currency transfer between users
+session_start();
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
@@ -10,18 +11,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
-require_once '../config.php';
+require_once __DIR__ . '/../config.php';
+
+if (!isset($_SESSION['user_id'])) {
+    http_response_code(401);
+    echo json_encode(['error' => 'Not authenticated']);
+    exit;
+}
 
 try {
     $pdo = new PDO(DB_DSN, DB_USER, DB_PASS);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $input = json_decode(file_get_contents('php://input'), true);
-    $sender_user_id = $input['sender_user_id'] ?? null;
+    $sender_user_id = $_SESSION['user_id']; // Use session user_id as sender
     $recipient_email = $input['recipient_email'] ?? null;
     $amount = $input['amount'] ?? null;
     $currency = $input['currency'] ?? null;
     $rate = $input['rate'] ?? null;
-    if (!$sender_user_id || !$recipient_email || !$amount || !$currency || !$rate) {
+    if (!$recipient_email || !$amount || !$currency || !$rate) {
         echo json_encode(['error' => 'Missing parameters']);
         exit();
     }
