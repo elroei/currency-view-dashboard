@@ -139,6 +139,14 @@ All endpoints return JSON and support CORS.
 
 ---
 
+AI Tools Used
+This project utilized the following AI-related tools during development:
+
+ChatGPT – for code generation, debugging assistance, and feature planning
+Claude – for code review and UI/UX suggestions
+Cursor – AI-powered IDE for inline coding and completion
+LOVable – for generating and customizing frontend components
+
 ## 📄 License
 elroei seadia
 
