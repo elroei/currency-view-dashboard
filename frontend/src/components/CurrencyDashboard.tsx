@@ -765,7 +765,7 @@ export function CurrencyDashboard() {
             )}
           </CardHeader>
           <CardContent>
-            <div className="h-80 flex items-center justify-center">
+            <div className="h-80 flex items-center justify-center bg-white/60 dark:bg-zinc-900/60 rounded-3xl shadow-xl p-6">
               {historicalLoading ? (
                 <span className="text-muted-foreground">Loading...</span>
               ) : historicalError ? (
@@ -854,7 +854,7 @@ export function CurrencyDashboard() {
               <Badge variant="secondary">{transactions.length} transactions</Badge>
             </CardHeader>
             <CardContent>
-              <Table>
+              <Table className="rounded-2xl overflow-hidden shadow-xl">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Date</TableHead>
@@ -865,7 +865,7 @@ export function CurrencyDashboard() {
                 </TableHeader>
                 <TableBody>
                   {transactions.map((transaction) => (
-                    <TableRow key={transaction.id}>
+                    <TableRow key={transaction.id} className="even:bg-accent/10 hover:bg-accent/20 transition-colors duration-100">
                       <TableCell>{transaction.date}</TableCell>
                       <TableCell>
                         <Badge variant={transaction.type === 'deposit' ? 'default' : 'secondary'}>
