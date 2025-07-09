@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import React from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip, Area, Legend, ReferenceLine } from "recharts";
 import { 
   RefreshCw, 
   ArrowUpRight, 
@@ -23,12 +24,17 @@ import {
   Eye,
   EyeOff,
   Plus,
-  History
+  History,
+  Calendar
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { format } from "date-fns";
+import { addDays, subDays, subMonths, subYears, format as formatDate, startOfWeek, startOfMonth, isAfter } from "date-fns";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { fetchBoiHistoricalRates } from "@/lib/utils";
+import { Calendar as DateRangePicker } from "@/components/ui/calendar";
 
 // Mock data - In production, this would come from your PHP backend APIs
 const mockBalances = {
@@ -59,8 +65,15 @@ const currencyFlags = {
 };
 
 // Helper to sort rates by date ascending (oldest to newest)
+function isValidDateString(dateStr: string) {
+  const d = new Date(dateStr);
+  return !isNaN(d.getTime());
+}
+
 function sortRatesAsc(rates) {
-  return [...rates].sort((a, b) => new Date(a.date) - new Date(b.date));
+  // Filter out invalid or missing dates
+  const validRates = rates.filter(r => r.date && isValidDateString(r.date));
+  return [...validRates].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 }
 
 export function CurrencyDashboard() {
@@ -73,7 +86,7 @@ export function CurrencyDashboard() {
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [showBalances, setShowBalances] = useState(true);
   const [alertThreshold, setAlertThreshold] = useState("");
-  const [selectedCurrencyChart, setSelectedCurrencyChart] = useState("USD");
+  const [selectedCurrencyChart, setSelectedCurrencyChart] = useState<string>("USD");
   const { toast } = useToast();
 
   // New state for real data
@@ -82,6 +95,9 @@ export function CurrencyDashboard() {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [historicalRates, setHistoricalRates] = useState<{ [currency: string]: { date: string, rate: number }[] }>({});
+  const [historicalLoading, setHistoricalLoading] = useState(false);
+  const [historicalError, setHistoricalError] = useState<string | null>(null);
+  const cacheRef = useRef({});
 
   // Notification state
   const [notifications, setNotifications] = useState([]);
@@ -91,58 +107,56 @@ export function CurrencyDashboard() {
   // Theme state
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
 
-  // Add at the top, after other useState hooks
+  // Replace the old rateAlerts state and related logic with the following:
+  const SUPPORTED_ALERT_CURRENCIES = ["USD", "EUR", "GBP"];
+  const [alertCurrency, setAlertCurrency] = useState("USD");
   const [rateAlerts, setRateAlerts] = useState(() => {
-    // Load from localStorage
     try {
-      return JSON.parse(localStorage.getItem('usdIlsRateAlerts') || '[]');
+      return JSON.parse(localStorage.getItem('multiPairRateAlerts') || '[]');
     } catch {
       return [];
     }
   });
 
-  // Save alerts to localStorage whenever they change
   useEffect(() => {
-    localStorage.setItem('usdIlsRateAlerts', JSON.stringify(rateAlerts));
+    localStorage.setItem('multiPairRateAlerts', JSON.stringify(rateAlerts));
   }, [rateAlerts]);
 
-  // Helper to get current USD > ILS rate
-  const getUsdIlsRate = () => {
-    // Find USD and ILS rates (relative to USD)
-    const usdRate = exchangeRates.find(r => r.currency === 'USD')?.rate;
+  // Helper to get current X > ILS rate
+  type AlertCurrency = "USD" | "EUR" | "GBP";
+  const getPairRate = (currency: AlertCurrency) => {
+    const fromRate = exchangeRates.find(r => r.currency === currency)?.rate;
     const ilsRate = exchangeRates.find(r => r.currency === 'ILS')?.rate;
-    if (!usdRate || !ilsRate) return null;
-    // 1 USD = (ILS rate / USD rate) ILS
-    return ilsRate / usdRate;
+    if (!fromRate || !ilsRate) return null;
+    return ilsRate / fromRate;
   };
 
   // Check alerts on every rate update
   useEffect(() => {
-    const currentRate = getUsdIlsRate();
-    if (!currentRate) return;
-    rateAlerts.forEach((alert) => {
-      if (!alert.triggered && currentRate >= alert.threshold) {
-        addNotification({
-          type: 'rate-alert',
-          message: `USD/ILS rate reached ${currentRate.toFixed(3)} (alert: ${alert.threshold})`,
-          timestamp: new Date(),
-          icon: <Bell className="h-4 w-4 text-warning inline-block mr-1" />
-        });
-        // Mark as triggered
-        setRateAlerts((prev) => prev.map(a => a === alert ? { ...a, triggered: true } : a));
-      }
+    SUPPORTED_ALERT_CURRENCIES.forEach((currency) => {
+      const currentRate = getPairRate(currency as AlertCurrency);
+      if (!currentRate) return;
+      rateAlerts.forEach((alert) => {
+        if (alert.currency === currency && !alert.triggered && currentRate >= alert.threshold) {
+          addNotification({
+            type: 'rate-alert',
+            message: `${currency}/ILS rate reached ${currentRate.toFixed(3)} (alert: ${alert.threshold})`,
+            timestamp: new Date(),
+            icon: <Bell className="h-4 w-4 text-warning inline-block mr-1" />
+          });
+          setRateAlerts((prev) => prev.map(a => a === alert ? { ...a, triggered: true } : a));
+        }
+      });
     });
   }, [exchangeRates]);
 
-  // Add alert handler
   const handleAddRateAlert = () => {
     const threshold = parseFloat(alertThreshold);
     if (isNaN(threshold) || threshold <= 0) return;
-    setRateAlerts(prev => [...prev, { threshold, triggered: false }]);
+    setRateAlerts(prev => [...prev, { currency: alertCurrency, threshold, triggered: false }]);
     setAlertThreshold("");
   };
 
-  // Remove alert handler
   const handleRemoveRateAlert = (idx) => {
     setRateAlerts(prev => prev.filter((_, i) => i !== idx));
   };
@@ -213,65 +227,68 @@ export function CurrencyDashboard() {
     }
   };
 
-  // Fetch historical rates for yesterday, 1 month before yesterday, and 2 months before yesterday for USD, EUR, GBP to ILS
-  useEffect(() => {
-    async function fetchHistoricalRates() {
-      const cacheKey = 'currencyapi_historical_rates_v1';
-      const cache = localStorage.getItem(cacheKey);
-      const cacheTTL = 5 * 60 * 1000; // 5 minutes
-      const now = Date.now();
+  const [dateRange, setDateRange] = useState<{ from: Date; to?: Date } | undefined>(() => ({
+    from: subMonths(new Date(), 1),
+    to: new Date(),
+  }));
 
-      if (cache) {
-        const { timestamp, data } = JSON.parse(cache);
-        if (now - timestamp < cacheTTL) {
-          setHistoricalRates(data);
-          return;
-        }
-      }
+  const [chartFilter, setChartFilter] = useState<'daily' | 'weekly' | 'monthly' | '5years'>('daily');
 
-      const apiKey = import.meta.env.VITE_CURRENCYAPI_KEY;
-      const currencies = ["USD", "EUR", "GBP"];
-      const toCurrency = "ILS";
-      // Use yesterday as the most recent date
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      // Helper to get YYYY-MM-DD string
-      const getDateStr = (date) => date.toISOString().slice(0, 10);
-      // Calculate the three dates: yesterday, 1 month before, 2 months before
-      const dates = [
-        new Date(yesterday),
-        new Date(yesterday),
-        new Date(yesterday)
-      ];
-      dates[1].setMonth(dates[1].getMonth() - 1);
-      dates[2].setMonth(dates[2].getMonth() - 2);
-      const dateStrs = dates.map(getDateStr);
-      const results: { [currency: string]: { date: string, rate: number }[] } = {};
-      for (const base of currencies) {
-        results[base] = [];
-        for (const dateStr of dateStrs) {
-          const url = `https://api.currencyapi.com/v3/historical?apikey=${apiKey}&date=${dateStr}&base_currency=${base}&currencies=${toCurrency}`;
-          try {
-            // eslint-disable-next-line no-await-in-loop
-            const resp = await fetch(url);
-            // eslint-disable-next-line no-await-in-loop
-            const json = await resp.json();
-            const value = json?.data?.[toCurrency]?.value;
-            if (value) {
-              results[base].push({ date: dateStr, rate: value });
-            }
-          } catch (e) {
-            // Optionally handle error
-          }
-          // eslint-disable-next-line no-await-in-loop
-          await new Promise(res => setTimeout(res, 200)); // 0.2s delay
+  function aggregateRates(rates, filter) {
+    if (filter === 'daily') return rates;
+    if (filter === 'weekly') {
+      const map = new Map();
+      rates.forEach(r => {
+        if (typeof r.date === 'string' && r.date.length > 0 && !isNaN(new Date(r.date).getTime())) {
+          const week = formatDate(startOfWeek(new Date(r.date)), 'yyyy-MM-dd');
+          map.set(week, r); // last rate of the week
         }
-      }
-      setHistoricalRates(results);
-      localStorage.setItem(cacheKey, JSON.stringify({ timestamp: now, data: results }));
+      });
+      return Array.from(map.values());
     }
-    fetchHistoricalRates();
-  }, []);
+    if (filter === 'monthly' || filter === '5years') {
+      const map = new Map();
+      rates.forEach(r => {
+        if (typeof r.date === 'string' && r.date.length > 0 && !isNaN(new Date(r.date).getTime())) {
+          const month = formatDate(startOfMonth(new Date(r.date)), 'yyyy-MM');
+          map.set(month, r); // last rate of the month
+        }
+      });
+      return Array.from(map.values());
+    }
+    return rates;
+  }
+
+  const fetchHistoricalRates = async (currency: string, from: Date, to: Date) => {
+    setHistoricalLoading(true);
+    setHistoricalError(null);
+    const start_date = formatDate(from, "yyyy-MM-dd");
+    const end_date = formatDate(to, "yyyy-MM-dd");
+    const cacheKey = `${currency}_${start_date}_${end_date}`;
+    if (cacheRef.current[cacheKey]) {
+      setHistoricalRates(r => ({ ...r, [currency]: cacheRef.current[cacheKey] }));
+      setHistoricalLoading(false);
+      return;
+    }
+    try {
+      const data = await fetchBoiHistoricalRates(currency as 'USD' | 'EUR' | 'GBP', from, to);
+      if (data && Array.isArray(data) && data.length > 0) {
+        cacheRef.current[cacheKey] = data;
+        setHistoricalRates(r => ({ ...r, [currency]: data }));
+      } else {
+        setHistoricalRates(r => ({ ...r, [currency]: [] }));
+        setHistoricalError("No data available for this range.");
+      }
+    } catch (e) {
+      setHistoricalError("Failed to load historical rates.");
+    }
+    setHistoricalLoading(false);
+  };
+
+  // Fetch on currency or date range change
+  useEffect(() => {
+    fetchHistoricalRates(selectedCurrencyChart as 'USD' | 'EUR' | 'GBP', dateRange?.from || new Date(), dateRange?.to || new Date());
+  }, [selectedCurrencyChart, dateRange]);
 
   // Initial load
   useEffect(() => {
@@ -396,6 +413,26 @@ export function CurrencyDashboard() {
     // 1 unit of currency = (curRate / ilsRate) ILS
     return curRate / ilsRate;
   };
+
+  const filteredRates = (() => {
+    let rates = sortRatesAsc(historicalRates[selectedCurrencyChart] || [])
+      .map(d => ({ ...d, date: typeof d.date === 'string' ? d.date : (d.date instanceof Date ? formatDate(d.date, 'yyyy-MM-dd') : (d.date && d.date.toString ? d.date.toString() : '')) }))
+      .filter(d => typeof d.date === 'string' && d.date.length > 0 && !isNaN(new Date(d.date).getTime()));
+    return rates;
+  })();
+
+  const predefinedRanges = [
+    { label: "1 Week", get: () => ({ from: subDays(new Date(), 7), to: new Date() }) },
+    { label: "1 Month", get: () => ({ from: subMonths(new Date(), 1), to: new Date() }) },
+    { label: "1 Year", get: () => ({ from: subYears(new Date(), 1), to: new Date() }) },
+    { label: "5 Years", get: () => ({ from: subYears(new Date(), 5), to: new Date() }) },
+  ];
+  type RangeLabel = '1 Week' | '1 Month' | '1 Year' | '5 Years' | 'custom';
+  const [activeRange, setActiveRange] = useState<RangeLabel>('1 Month'); // Default: 1 Month
+
+  // Add state for base currency selector
+  const allCurrencies = Array.from(new Set([...(exchangeRates.map(r => r.currency)), "ILS"]));
+  const [baseCurrency, setBaseCurrency] = useState("ILS");
 
   return (
     <div className="min-h-screen bg-background">
@@ -608,26 +645,57 @@ export function CurrencyDashboard() {
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle>Exchange Rates</CardTitle>
-                <CardDescription>Current rates to ILS</CardDescription>
+                <CardDescription>Current rates per 1 {baseCurrency}</CardDescription>
               </div>
               <Button variant="ghost" size="icon" onClick={refreshRates}>
                 <RefreshCw className="h-4 w-4" />
               </Button>
             </CardHeader>
             <CardContent>
+              <div className="mb-2 flex items-center gap-2">
+                <Label htmlFor="base-currency">Base Currency:</Label>
+                <Select value={baseCurrency} onValueChange={setBaseCurrency}>
+                  <SelectTrigger className="w-24">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allCurrencies.map(currency => (
+                      <SelectItem key={currency} value={currency}>
+                        {currencyFlags[currency as keyof typeof currencyFlags] || currency} {currency}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-3">
-                {exchangeRates.map((rate) => (
-                  <div key={rate.currency} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-lg">{currencyFlags[rate.currency as keyof typeof currencyFlags]}</span>
-                      <span className="font-medium">{rate.currency}</span>
+                {allCurrencies.map((currency) => {
+                  let rate = 1;
+                  if (currency !== baseCurrency) {
+                    const baseRate = exchangeRates.find(r => r.currency === baseCurrency)?.rate;
+                    const targetRate = exchangeRates.find(r => r.currency === currency)?.rate;
+                    if (baseRate && targetRate) {
+                      rate = targetRate / baseRate;
+                    } else {
+                      rate = NaN;
+                    }
+                  }
+                  return (
+                    <div key={currency} className={`flex items-center justify-between p-3 rounded-lg bg-muted/50 ${currency === baseCurrency ? 'ring-2 ring-primary' : ''}`}>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-lg">{currencyFlags[currency as keyof typeof currencyFlags] || currency}</span>
+                        <span className="font-medium">{currency}</span>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-bold text-lg">
+                          {isNaN(rate) ? "-" : rate.toFixed(4)}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {currency === baseCurrency ? "Base" : (exchangeRates.find(r => r.currency === currency)?.lastUpdated || "")}
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <div className="font-bold text-lg">{rate.rate}</div>
-                      <div className="text-xs text-muted-foreground">{rate.lastUpdated}</div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
@@ -636,53 +704,138 @@ export function CurrencyDashboard() {
         {/* Historical Chart */}
         <Card className="bg-gradient-card shadow-card">
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div>
                 <CardTitle>Historical Exchange Rates</CardTitle>
-                <CardDescription>
-                  Track currency performance over time
-                </CardDescription>
+                <CardDescription>Track currency performance over time</CardDescription>
               </div>
-              <Select value={selectedCurrencyChart} onValueChange={setSelectedCurrencyChart}>
-                <SelectTrigger className="w-32">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="USD">USD/ILS</SelectItem>
-                  <SelectItem value="EUR">EUR/ILS</SelectItem>
-                  <SelectItem value="GBP">GBP/ILS</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex flex-col md:flex-row gap-2 items-center">
+                <Select value={selectedCurrencyChart} onValueChange={setSelectedCurrencyChart}>
+                  <SelectTrigger className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="USD">USD/ILS</SelectItem>
+                    <SelectItem value="EUR">EUR/ILS</SelectItem>
+                    <SelectItem value="GBP">GBP/ILS</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="flex gap-1">
+                  {predefinedRanges.map(r => (
+                    <Button
+                      key={r.label}
+                      size="sm"
+                      variant={activeRange === r.label ? "default" : "outline"}
+                      onClick={() => {
+                        const range = r.get();
+                        if (range.from && range.to) {
+                          setDateRange({ from: range.from, to: range.to });
+                          setActiveRange(r.label as RangeLabel);
+                        }
+                      }}
+                    >
+                      {r.label}
+                    </Button>
+                  ))}
+                  <Button
+                    size="sm"
+                    variant={activeRange === 'custom' ? "default" : "outline"}
+                    onClick={() => setActiveRange('custom')}
+                  >
+                    Custom
+                  </Button>
+                </div>
+              </div>
             </div>
+            {activeRange === 'custom' && (
+              <div className="mt-2 flex flex-col md:flex-row gap-2 items-center">
+                <span className="text-xs text-muted-foreground">Custom Range:</span>
+                <DateRangePicker
+                  mode="range"
+                  selected={dateRange}
+                  onSelect={range => {
+                    if (range && range.from) {
+                      setDateRange({ from: range.from, to: range.to });
+                      setActiveRange('custom');
+                    }
+                  }}
+                  numberOfMonths={2}
+                />
+              </div>
+            )}
           </CardHeader>
           <CardContent>
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={sortRatesAsc(historicalRates[selectedCurrencyChart] || [])}>
-                  <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                  <XAxis dataKey="date" />
-                  <YAxis 
-                    domain={[dataMin => dataMin - 0.05, dataMax => dataMax + 0.05]}
-                    tickFormatter={value => value.toFixed(2)}
-                  />
-                  <Tooltip 
-                    contentStyle={{
-                      backgroundColor: 'hsl(var(--background))',
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px',
-                      color: 'hsl(var(--foreground))'
-                    }}
-                  />
-                  <Line 
-                    type="monotone" 
-                    dataKey="rate" 
-                    stroke="#ff007a" 
-                    strokeWidth={4}
-                    dot={{ fill: '#ff007a', stroke: '#fff', strokeWidth: 2, r: 8 }}
-                    activeDot={{ r: 12, fill: '#fff', stroke: '#ff007a', strokeWidth: 4 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+            <div className="h-80 flex items-center justify-center">
+              {historicalLoading ? (
+                <span className="text-muted-foreground">Loading...</span>
+              ) : historicalError ? (
+                <span className="text-destructive">{historicalError}</span>
+              ) : (filteredRates.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={filteredRates} margin={{ top: 30, right: 30, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorRate" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={selectedCurrencyChart === 'USD' ? '#2563eb' : selectedCurrencyChart === 'EUR' ? '#059669' : '#a21caf'} stopOpacity={0.5}/>
+                        <stop offset="100%" stopColor="#fff" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="4 4" className="opacity-20" />
+                    <XAxis dataKey="date" tick={{ fontSize: 13, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
+                    <YAxis 
+                      domain={[dataMin => dataMin - 0.05, dataMax => dataMax + 0.05]}
+                      tickFormatter={value => value.toFixed(2)}
+                      tick={{ fontSize: 13, fill: 'hsl(var(--muted-foreground))' }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip 
+                      contentStyle={{
+                        background: 'rgba(255,255,255,0.85)',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '12px',
+                        boxShadow: '0 4px 24px 0 rgba(0,0,0,0.10)',
+                        color: 'hsl(var(--foreground))',
+                        backdropFilter: 'blur(6px)',
+                        padding: '12px 16px',
+                      }}
+                      labelStyle={{ fontWeight: 600, color: 'hsl(var(--primary))' }}
+                      itemStyle={{ fontWeight: 500 }}
+                      cursor={{ fill: 'rgba(0,0,0,0.04)' }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="rate"
+                      stroke="none"
+                      fill="url(#colorRate)"
+                      fillOpacity={1}
+                      isAnimationActive={true}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="rate" 
+                      stroke={selectedCurrencyChart === 'USD' ? '#2563eb' : selectedCurrencyChart === 'EUR' ? '#059669' : '#a21caf'}
+                      strokeWidth={4}
+                      dot={{
+                        fill: '#fff',
+                        stroke: selectedCurrencyChart === 'USD' ? '#2563eb' : selectedCurrencyChart === 'EUR' ? '#059669' : '#a21caf',
+                        strokeWidth: 3,
+                        r: 7,
+                        filter: 'drop-shadow(0 0 8px rgba(37,99,235,0.25))',
+                      }}
+                      activeDot={{
+                        r: 11,
+                        fill: selectedCurrencyChart === 'USD' ? '#2563eb' : selectedCurrencyChart === 'EUR' ? '#059669' : '#a21caf',
+                        stroke: '#fff',
+                        strokeWidth: 5,
+                        filter: 'drop-shadow(0 0 12px rgba(37,99,235,0.25))',
+                      }}
+                      isAnimationActive={true}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <span className="text-muted-foreground">No data available for this range.</span>
+              ))}
             </div>
           </CardContent>
         </Card>
@@ -804,8 +957,20 @@ export function CurrencyDashboard() {
               <Separator />
 
               <div className="space-y-2">
-                <Label htmlFor="alert-threshold">Rate Alert (USD {">"} ILS)</Label>
+                <Label htmlFor="alert-currency">Rate Alert</Label>
                 <div className="flex space-x-2">
+                  <Select value={alertCurrency} onValueChange={setAlertCurrency}>
+                    <SelectTrigger className="w-24">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SUPPORTED_ALERT_CURRENCIES.map(currency => (
+                        <SelectItem key={currency} value={currency}>
+                          {currencyFlags[currency as keyof typeof currencyFlags]} {currency} &gt; ILS
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Input
                     id="alert-threshold"
                     type="number"
@@ -826,7 +991,7 @@ export function CurrencyDashboard() {
                     <div key={idx} className="flex items-center text-xs text-muted-foreground bg-muted/50 rounded px-2 py-1 justify-between">
                       <span>
                         <Bell className="h-3 w-3 inline-block mr-1 text-warning" />
-                        Alert at {alert.threshold} ILS {alert.triggered && <span className="ml-1 text-success">(triggered)</span>}
+                        Alert for {alert.currency} &gt; ILS at {alert.threshold} ILS {alert.triggered && <span className="ml-1 text-success">(triggered)</span>}
                       </span>
                       <Button variant="ghost" size="icon" className="h-5 w-5 p-0 ml-2" onClick={() => handleRemoveRateAlert(idx)}>
                         ×

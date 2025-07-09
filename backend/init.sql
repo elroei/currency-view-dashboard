@@ -20,6 +20,15 @@ CREATE TABLE IF NOT EXISTS transactions (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+-- Historical exchange rates table
+CREATE TABLE IF NOT EXISTS historical_exchange_rates (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    currency VARCHAR(8) NOT NULL,
+    rate_to_ils DECIMAL(18,6) NOT NULL,
+    date DATE NOT NULL,
+    UNIQUE KEY unique_currency_date (currency, date)
+);
+
 -- Seed users
 INSERT INTO users (id, email, name) VALUES
   (1, 'user1@example.com', 'User One'),

@@ -27,3 +27,7 @@ RUN chown -R www-data:www-data /var/www/html
 
 # Copy init.sql for DB initialization (used by docker-compose)
 COPY init.sql /docker-entrypoint-initdb.d/ 
+# Add entrypoint script to auto-import historical rates on container start
+COPY import_exchange_rates.sh /import_exchange_rates.sh
+RUN chmod +x /import_exchange_rates.sh
+ENTRYPOINT ["/import_exchange_rates.sh"] 

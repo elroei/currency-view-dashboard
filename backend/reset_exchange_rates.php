@@ -1,81 +1,83 @@
 <?php
-// reset_exchange_rates.php - Fetches and displays historical rates (USD, EUR, GBP to ILS) from CurrencyAPI.com for the last 3 days (excluding today)
-// Usage: php reset_exchange_rates.php
+// reset_exchange_rates.php - Fetches and stores historical rates (USD, EUR, GBP to ILS) from Bank of Israel SDMX-XML API for a given date range
+// Usage: php reset_exchange_rates.php [start_date] [end_date] [currency]
 
-$api_key = 'cur_live_pCAX9IrupD1vP0VNtjnnpnbx36yKyFH8KjyIkDBC';
+require_once __DIR__ . '/config.php';
 
-// Function to fetch rate with retry logic
-function fetchRate($url, $maxRetries = 3) {
-    for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
-        $context = stream_context_create([
-            'http' => [
-                'timeout' => 30,
-                'user_agent' => 'CurrencyWallet/1.0'
-            ]
-        ]);
-        
-        $json = @file_get_contents($url, false, $context);
-        
-        if ($json === false) {
-            $error = error_get_last();
-            if (strpos($error['message'], '429') !== false) {
-                echo "Rate limit hit, waiting 2 seconds before retry $attempt/$maxRetries...\n";
-                sleep(2);
-                continue;
-            }
-            throw new Exception("Failed to fetch data: " . $error['message']);
+function get_boi_sdmx_url($currency, $start, $end) {
+    $map = [
+        'USD' => 'RER_USD_ILS',
+        'EUR' => 'RER_EUR_ILS',
+        'GBP' => 'RER_GBP_ILS',
+    ];
+    if (!isset($map[$currency])) throw new Exception("Unsupported currency: $currency");
+    return "https://edge.boi.gov.il/FusionEdgeServer/sdmx/v2/data/dataflow/BOI.STATISTICS/EXR/1.0/{$map[$currency]}?startperiod=$start&endperiod=$end";
+}
+
+function fetch_boi_sdmx_xml($url) {
+    $opts = [
+        'http' => [
+            'timeout' => 30,
+            'user_agent' => 'CurrencyWallet/1.0'
+        ]
+    ];
+    $context = stream_context_create($opts);
+    $xml = @file_get_contents($url, false, $context);
+    if ($xml === false) throw new Exception("Failed to fetch $url");
+    return $xml;
+}
+
+function parse_sdmx_xml_rates($xml) {
+    $result = [];
+    $doc = new SimpleXMLElement($xml);
+    // Find all Obs nodes
+    foreach ($doc->xpath('//Obs') as $obs) {
+        $date = (string)$obs['TIME_PERIOD'];
+        $rate = (string)$obs['OBS_VALUE'];
+        if ($date && $rate) {
+            $result[] = ['date' => $date, 'rate' => $rate];
         }
-        
-        $data = json_decode($json, true);
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            throw new Exception("Invalid JSON response: " . json_last_error_msg());
-        }
-        
-        return $data;
     }
-    
-    throw new Exception("Failed after $maxRetries attempts due to rate limiting");
+    return $result;
+}
+
+// Parse CLI args
+global $argv;
+$start = $argv[1] ?? null;
+$end = $argv[2] ?? null;
+$currency = $argv[3] ?? null;
+if (!$start || !$end || !$currency) {
+    echo "Usage: php reset_exchange_rates.php [start_date] [end_date] [currency]\n";
+    echo "Example: php reset_exchange_rates.php 2023-01-01 2024-01-01 USD\n";
+    exit(1);
 }
 
 try {
-    // Date range: last 3 full days, excluding today
-    $end = (new DateTime('yesterday'))->setTime(0, 0, 0);
-    $start = (clone $end)->modify('-2 days'); // Only 3 days
-    $currencies = ['USD', 'EUR', 'GBP'];
-    $to_currency = 'ILS';
-    
-    $apiRequests = 0;
-    $date = clone $start;
-    while ($date <= $end) {
-        $date_str = $date->format('Y-m-d');
-        foreach ($currencies as $base) {
-            try {
-                $url = "https://api.currencyapi.com/v3/historical?apikey=$api_key&date=$date_str&base_currency=$base&currencies=$to_currency";
-                $data = fetchRate($url);
-                $rate = $data['data'][$to_currency]['value'] ?? null;
-                
-                if ($rate) {
-                    echo "Fetched rate for $base $date_str: $rate\n";
-                    $apiRequests++;
-                } else {
-                    echo "No rate data for $base $date_str\n";
-                }
-                
-                // Add delay between API requests to avoid rate limiting
-                usleep(200000); // 0.2 second delay
-                
-            } catch (Exception $e) {
-                echo "Error fetching $base $date_str: " . $e->getMessage() . "\n";
-                // Continue with next currency/date instead of failing completely
-            }
-        }
-        $date->modify('+1 day');
+    $url = get_boi_sdmx_url($currency, $start, $end);
+    echo "Fetching: $url\n";
+    $xml = fetch_boi_sdmx_xml($url);
+    $rates = parse_sdmx_xml_rates($xml);
+    if (empty($rates)) {
+        echo "No rates found for $currency in range $start to $end\n";
+        exit(0);
     }
-    
-    echo "\n=== Summary ===\n";
-    echo "API requests made: $apiRequests\n";
-    echo "Exchange rates fetched for last 3 days.\n";
-    
+    $pdo = new PDO(DB_DSN, DB_USER, DB_PASS);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $inserted = 0;
+    $updated = 0;
+    foreach ($rates as $row) {
+        $date = $row['date'];
+        $rate = $row['rate'];
+        // Try insert, if duplicate update
+        $stmt = $pdo->prepare('INSERT INTO historical_exchange_rates (currency, date, rate_to_ils) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE rate_to_ils = VALUES(rate_to_ils)');
+        $stmt->execute([$currency, $date, $rate]);
+        if ($stmt->rowCount() === 1) {
+            $inserted++;
+        } elseif ($stmt->rowCount() === 2) {
+            $updated++;
+        }
+    }
+    echo "Inserted: $inserted, Updated: $updated\n";
 } catch (Exception $e) {
     echo "Error: " . $e->getMessage() . "\n";
     exit(1);
