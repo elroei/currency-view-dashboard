@@ -73,6 +73,11 @@ const translations = {
     transferSuccessful: "Transfer Successful",
     transferFailed: "Transfer Failed",
     ratesUpdated: "Rates Updated",
+    currencyExchange: "Currency Exchange",
+    conversion_in: "Conversion In",
+    conversion_out: "Conversion Out",
+    transfer_in: "Transfer In",
+    transfer_out: "Transfer Out",
     // ...add more as needed
   },
   he: {
@@ -147,6 +152,11 @@ const translations = {
     transferSuccessful: "העברה בוצעה בהצלחה",
     transferFailed: "העברה נכשלה",
     ratesUpdated: "שערים עודכנו",
+    currencyExchange: "המרת מטבע",
+    conversion_in: "המרה נכנסת",
+    conversion_out: "המרה יוצאת",
+    transfer_in: "העברה נכנסת",
+    transfer_out: "העברה יוצאת",
     // ...add more as needed
   }
 };

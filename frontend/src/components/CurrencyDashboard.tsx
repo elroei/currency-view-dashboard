@@ -343,7 +343,7 @@ export function CurrencyDashboard() {
       });
       const data = await res.json();
       if (data.success) {
-        toast({ title: "Deposit Successful", description: `Successfully deposited ${depositAmount} ${depositCurrency}` });
+        toast({ title: "Deposit completed successfully", variant: "default" });
         addNotification({
           type: "deposit",
           message: `Deposit of ${depositAmount} ${depositCurrency} completed`,
@@ -550,6 +550,18 @@ export function CurrencyDashboard() {
   const [pendingTransfer, setPendingTransfer] = useState(null);
   const [transferPwLoading, setTransferPwLoading] = useState(false);
 
+  const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
+  const [convertSource, setConvertSource] = useState("USD");
+  const [convertTarget, setConvertTarget] = useState("ILS");
+  const [convertAmount, setConvertAmount] = useState("");
+  const [convertResult, setConvertResult] = useState(null);
+  const [convertLoading, setConvertLoading] = useState(false);
+  const [convertError, setConvertError] = useState("");
+
+  // Add state for conversion confirmation
+  const [showConvertConfirm, setShowConvertConfirm] = useState(false);
+  const [pendingConvert, setPendingConvert] = useState(null);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/30 to-accent/10">
       {/* Header with user info and logout */}
@@ -651,43 +663,76 @@ export function CurrencyDashboard() {
                 {t('addFunds')}
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="amount">{t('amount')}</Label>
-                  <Input
-                    id="amount"
-                    type="number"
-                    placeholder="0.00"
-                    value={depositAmount}
-                    onChange={(e) => setDepositAmount(e.target.value)}
-                  />
+            <CardContent>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="amount">{t('amount')}</Label>
+                    <Input
+                      id="amount"
+                      type="number"
+                      placeholder="0.00"
+                      value={depositAmount}
+                      onChange={(e) => setDepositAmount(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="currency">{t('currency')}</Label>
+                    <Select value={depositCurrency} onValueChange={setDepositCurrency}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {["USD", "EUR", "GBP", "ILS"].map(currency => (
+                          <SelectItem key={currency} value={currency}>
+                            {currencyFlags[currency as keyof typeof currencyFlags]} {currency}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="currency">{t('currency')}</Label>
-                  <Select value={depositCurrency} onValueChange={setDepositCurrency}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {["USD", "EUR", "GBP", "ILS"].map(currency => (
-                        <SelectItem key={currency} value={currency}>
-                          {currencyFlags[currency as keyof typeof currencyFlags]} {currency}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <Button
+                  onClick={handleDeposit}
+                  className="w-full mt-2 transition-all duration-200 ease-in-out focus:ring-2 focus:ring-primary/40 focus:outline-none hover:scale-[1.03]"
+                  variant="success"
+                  size="lg"
+                  disabled={loading}
+                >
+                  {loading ? "Depositing..." : "Deposit Funds"}
+                </Button>
+
+                {/* Add extra vertical spacing between Deposit and Currency Exchange sections */}
+                <div className="mb-8"></div>
+
+                {/* Convert Currency section inside Quick Deposit */}
+                <div>
+                  <CardTitle className="flex items-center space-x-2">
+                    <span>🔁</span>
+                    <span className="text-lg font-bold">{t('currencyExchange')}</span>
+                  </CardTitle>
+                  <CardDescription>
+                    Convert between currencies in your wallet.
+                  </CardDescription>
+                  <Button
+                    onClick={() => {
+                      setConvertSource('USD');
+                      setConvertTarget('ILS');
+                      setConvertAmount('');
+                      setConvertResult(null);
+                      setConvertError('');
+                      setPendingConvert(null);
+                      setShowConvertConfirm(false);
+                      setIsConvertModalOpen(true);
+                    }}
+                    className="w-full mt-2 transition-all duration-200 ease-in-out focus:ring-2 focus:ring-primary/40 focus:outline-none hover:scale-[1.03]"
+                    variant="success"
+                    size="lg"
+                  >
+                    Open Conversion Modal
+                  </Button>
                 </div>
               </div>
-              <Button 
-                onClick={handleDeposit} 
-                className="w-full" 
-                variant="success"
-                size="lg"
-                disabled={loading}
-              >
-                {loading ? "Depositing..." : "Deposit Funds"}
-              </Button>
             </CardContent>
           </Card>
 
@@ -916,24 +961,34 @@ export function CurrencyDashboard() {
                 <TableBody>
                   {transactions.map((transaction) => (
                     <TableRow key={transaction.id} className="even:bg-accent/10 hover:bg-accent/20 transition-colors duration-100">
-                      <TableCell>{transaction.date}</TableCell>
+                      <TableCell>
+                        {transaction.created_at
+                          ? format(new Date(transaction.created_at), 'dd-MM-yyyy  HH:mm')
+                          : (transaction.date ? format(new Date(transaction.date), 'dd-MM-yyyy  HH:mm') : '')}
+                      </TableCell>
                       <TableCell>
                         <Badge variant={transaction.type === 'deposit' ? 'default' : 'secondary'}>
-                          {transaction.type === 'deposit' ? (
-                            <>
-                              <ArrowDownRight className="h-3 w-3 mr-1" />{t('deposit')}
-                            </>
-                          ) : (
-                            <>
-                              <ArrowUpRight className="h-3 w-3 mr-1" />{t('transfer')}
-                            </>
+                          {transaction.type === 'deposit' && (<><ArrowDownRight className="h-3 w-3 mr-1" />Deposit</>)}
+                          {transaction.type === 'conversion_in' && (<><ArrowDownRight className="h-3 w-3 mr-1" />Conversion In</>)}
+                          {transaction.type === 'conversion_out' && (<><ArrowUpRight className="h-3 w-3 mr-1" />Conversion Out</>)}
+                          {transaction.type === 'transfer_in' && (<><ArrowDownRight className="h-3 w-3 mr-1" />Transfer In</>)}
+                          {transaction.type === 'transfer_out' && (<><ArrowUpRight className="h-3 w-3 mr-1" />Transfer Out</>)}
+                          {/* fallback for unknown types */}
+                          {![
+                            'deposit',
+                            'conversion_in',
+                            'conversion_out',
+                            'transfer_in',
+                            'transfer_out',
+                          ].includes(transaction.type) && (
+                            <>{transaction.type}</>
                           )}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         {currencyFlags[transaction.currency as keyof typeof currencyFlags]} {transaction.amount} {transaction.currency}
                       </TableCell>
-                      <TableCell>{transaction.equivalent} ILS</TableCell>
+                      <TableCell>{transaction.equivalent ? `${transaction.equivalent} ILS` : ''}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -956,7 +1011,7 @@ export function CurrencyDashboard() {
                     {loading ? "Sending..." : "Send Money"}
                   </Button>
                 </DialogTrigger>
-                <DialogContent>
+                <DialogContent className="transition-all duration-300 ease-in-out">
                   <DialogHeader>
                     <DialogTitle>{t('sendMoney')}</DialogTitle>
                     <DialogDescription>
@@ -1060,7 +1115,7 @@ export function CurrencyDashboard() {
       </div>
 
       <Dialog open={showChangePw} onOpenChange={setShowChangePw}>
-        <DialogContent className="max-w-md bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md rounded-2xl shadow-2xl">
+        <DialogContent className="max-w-md bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md rounded-2xl shadow-2xl transition-all duration-300 ease-in-out">
           <DialogHeader>
             <DialogTitle>{t('changePassword')}</DialogTitle>
             <DialogDescription>{t('enterCurrentPasswordAndNewPassword')}</DialogDescription>
@@ -1089,7 +1144,7 @@ export function CurrencyDashboard() {
       </Dialog>
 
       <Dialog open={showTransferPw} onOpenChange={setShowTransferPw}>
-        <DialogContent className="max-w-md bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md rounded-2xl shadow-2xl">
+        <DialogContent className="max-w-md bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md rounded-2xl shadow-2xl transition-all duration-300 ease-in-out">
           <DialogHeader>
             <DialogTitle>{t('confirmTransfer')}</DialogTitle>
             <DialogDescription>{t('enterPasswordToConfirm')}</DialogDescription>
@@ -1112,8 +1167,142 @@ export function CurrencyDashboard() {
         </DialogContent>
       </Dialog>
 
+      {/* Conversion Modal (already implemented) */}
+      <Dialog open={isConvertModalOpen} onOpenChange={setIsConvertModalOpen}>
+        <DialogContent className="max-w-md bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md rounded-2xl shadow-2xl transition-all duration-300 ease-in-out">
+          <DialogHeader>
+            <DialogTitle>Currency Conversion</DialogTitle>
+            <DialogDescription>
+              Convert money between currencies in your wallet using the latest Bank of Israel rates.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 mt-2">
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <Label>From</Label>
+                <Select value={convertSource} onValueChange={setConvertSource}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.keys(balances).map((cur) => (
+                      <SelectItem key={cur} value={cur}>{cur} {currencyFlags[cur]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex-1">
+                <Label>To</Label>
+                <Select value={convertTarget} onValueChange={setConvertTarget}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.keys(balances).filter(cur => cur !== convertSource).map((cur) => (
+                      <SelectItem key={cur} value={cur}>{cur} {currencyFlags[cur]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <Label>Amount</Label>
+              <Input type="number" min="0" value={convertAmount} onChange={e => setConvertAmount(e.target.value)} />
+              <div className="text-xs text-muted-foreground mt-1">
+                Balance: {balances[convertSource] ?? 0} {convertSource}
+              </div>
+            </div>
+            {convertError && <Alert variant="destructive"><AlertDescription>{convertError}</AlertDescription></Alert>}
+            {convertResult && (
+              <Alert>
+                <AlertDescription>{convertResult.summary}</AlertDescription>
+              </Alert>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={() => {
+                setConvertError("");
+                setConvertResult(null);
+                setPendingConvert({
+                  source: convertSource,
+                  target: convertTarget,
+                  amount: convertAmount,
+                  rate: (() => {
+                    if (!convertSource || !convertTarget || convertSource === convertTarget) return null;
+                    const sourceRate = exchangeRates.find(r => r.currency === convertSource)?.rate || 1;
+                    const targetRate = exchangeRates.find(r => r.currency === convertTarget)?.rate || 1;
+                    return sourceRate / targetRate;
+                  })(),
+                });
+                setShowConvertConfirm(true);
+              }}
+              disabled={convertLoading || !convertAmount || parseFloat(convertAmount) <= 0 || convertSource === convertTarget}
+              className="w-full"
+            >
+              {convertLoading ? "Converting..." : "Convert"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Conversion Confirmation Dialog */}
+      <Dialog open={showConvertConfirm} onOpenChange={setShowConvertConfirm}>
+        <DialogContent className="transition-all duration-300 ease-in-out">
+          <DialogHeader>
+            <DialogTitle>Confirm Conversion</DialogTitle>
+            <DialogDescription>
+              {pendingConvert && (
+                <span>
+                  You’re about to convert <b>{pendingConvert.amount} {pendingConvert.source}</b> to approximately <b>{pendingConvert.rate ? (parseFloat(pendingConvert.amount) * pendingConvert.rate).toLocaleString(undefined, { maximumFractionDigits: 2 }) : "..."} {pendingConvert.target}</b>
+                  {pendingConvert.rate_date && (
+                    <>
+                      <br />using the exchange rate from <b>{pendingConvert.rate_date}</b>.
+                    </>
+                  )}
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              onClick={async () => {
+                setConvertLoading(true);
+                setConvertError("");
+                setConvertResult(null);
+                setShowConvertConfirm(false);
+                try {
+                  const res = await fetch("/api/convert.php", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      source_currency: convertSource,
+                      target_currency: convertTarget,
+                      amount: parseFloat(convertAmount)
+                    })
+                  });
+                  const data = await res.json();
+                  if (!res.ok || data.error) {
+                    setConvertError(data.error || "Conversion failed");
+                  } else {
+                    setConvertResult(data);
+                    fetchBalances();
+                    fetchExchangeRates();
+                    fetchTransactions();
+                  }
+                } catch (e) {
+                  setConvertError("Network error");
+                } finally {
+                  setConvertLoading(false);
+                }
+              }}
+              className="w-full"
+            >
+              Confirm
+            </Button>
+            <Button variant="ghost" onClick={() => setShowConvertConfirm(false)} className="w-full">Cancel</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Drawer open={showProfile} onOpenChange={setShowProfile}>
-        <DrawerContent className="max-w-lg mx-auto bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md rounded-2xl shadow-2xl p-0">
+        <DrawerContent className="max-w-lg mx-auto bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md rounded-2xl shadow-2xl p-0 transition-all duration-300 ease-in-out">
           <DrawerHeader className="px-8 pt-8 pb-2">
             <DrawerTitle className="text-2xl font-extrabold tracking-tight text-primary drop-shadow-sm">{t('profileSettings')}</DrawerTitle>
             <DrawerDescription className="text-base text-muted-foreground mt-1 mb-2">{t('manageAccountAndPreferences')}</DrawerDescription>

@@ -91,13 +91,14 @@ All endpoints return JSON and support CORS.
 | GET    | `/api/get_rates.php`    | Get latest exchange rates                   |
 | GET/POST | `/api/transactions.php` | List transactions for a user (`user_id`)   |
 | POST   | `/api/transfer.php`     | Transfer between users (by email)           |
+| POST   | `/api/convert.php`      | Currency exchange within wallet (see below) |
 
 ---
 
 ## 👤 Multi-User Support
 
 - **User selector** in the frontend: switch between `user1@example.com` and `user2@example.com`.
-- All wallet actions (deposit, transfer, view balances) are user-specific.
+- All wallet actions (deposit, transfer, currency exchange, view balances) are user-specific.
 - Transfers are performed by entering the recipient's email.
 
 ---
@@ -107,6 +108,14 @@ All endpoints return JSON and support CORS.
 - **Supported:** USD, EUR, GBP, ILS (Israeli Shekel)
 - All wallet operations and balances support ILS natively.
 - **Live exchange rates** are fetched from the backend and displayed in the dashboard.
+- **Currency Exchange:**
+  - The dashboard features a unified card for **Quick Deposit** and **Currency Exchange**.
+  - Instantly convert between currencies in your wallet using the latest available rate.
+  - **Exchange rate logic:**
+    - The backend fetches rates for the last 5 days from the Bank of Israel API.
+    - The most recent available rate (starting from today, going backwards) is used for conversions.
+    - If no rate is found in the last 5 days, the conversion fails gracefully.
+    - The confirmation popup before conversion shows the exact date of the rate being used.
 - **Historical Exchange Rates:**
   - The dashboard displays a chart of historical rates (USD/EUR/GBP to ILS) for the last 3 months.
   - The most recent historical rate is used for equivalent value calculations, ensuring consistency across the dashboard.
@@ -120,14 +129,18 @@ All endpoints return JSON and support CORS.
 - **User-specific data:** Balances, transactions, and actions reflect the logged-in user only.
 - **Profile & Settings modal:** Edit profile info, change password, set preferences, and view activity log in a modern glassy modal.
 - **Change password:** Securely update your password from the settings modal.
-- **Language support:** Instantly switch between English and Hebrew throughout the UI.
+- **Language support:** Instantly switch between English and Hebrew throughout the UI. All new features and transaction types are fully translated.
 - **Password confirmation before transfers:** Extra security step before sending money.
 - **Theme toggle:** Light/dark mode available in the settings panel.
-- **In-app notifications:** All important actions (deposits, transfers, rate alerts) trigger notifications in the UI.
+- **In-app notifications:** All important actions (deposits, transfers, rate alerts, currency exchanges) trigger notifications in the UI.
 - **Rate Alerts:** Set custom alerts for exchange rates. Alerts are saved in your browser and persist across reloads. When the rate meets or exceeds your threshold, you receive an in-app notification. Manage (add/remove) active alerts in the dashboard.
 - **Currency conversion:** Each currency card shows the original amount and the equivalent in ILS, calculated using the most recent historical rate. The total wallet balance is always shown in your selected display currency, with all conversions based on the latest rates.
-- **Transaction history:** View all recent transactions, including deposits and transfers, with equivalent values in ILS.
-- **Quick deposit and transfer:** Instantly add funds or transfer between users with a simple, intuitive UI.
+- **Transaction history:**
+  - View all recent transactions, including deposits, transfers, and currency exchanges.
+  - The Type column clearly labels each transaction (Deposit, Conversion In, Conversion Out, Transfer In, Transfer Out, etc.).
+  - The Date column shows the correct date and time of each transaction (DD-MM-YYYY  HH:mm).
+  - Equivalent values in ILS are shown where relevant.
+- **Quick deposit, transfer, and exchange:** Instantly add funds, transfer, or exchange between currencies with a simple, intuitive UI.
 
 ---
 

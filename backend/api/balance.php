@@ -29,7 +29,7 @@ try {
         exit();
     }
     // Will include ILS in balances if user has ILS transactions
-    $stmt = $pdo->prepare('SELECT currency, SUM(CASE WHEN type = "deposit" THEN amount WHEN type = "transfer_in" THEN amount WHEN type = "transfer_out" THEN -amount ELSE 0 END) as balance FROM transactions WHERE user_id = ? GROUP BY currency');
+    $stmt = $pdo->prepare('SELECT currency, SUM(CASE WHEN type = "deposit" THEN amount WHEN type = "transfer_in" THEN amount WHEN type = "conversion_in" THEN amount WHEN type = "transfer_out" THEN -amount WHEN type = "conversion_out" THEN -amount ELSE 0 END) as balance FROM transactions WHERE user_id = ? GROUP BY currency');
     $stmt->execute([$user_id]);
     $balances = [];
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
