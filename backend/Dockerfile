@@ -1,6 +1,11 @@
 # Dockerfile for PHP backend (Apache)
 FROM php:7.4-apache
 
+# Install msmtp for email sending
+RUN apt-get update && apt-get install -y msmtp && rm -rf /var/lib/apt/lists/*
+# Add msmtp config for Mailpit
+RUN echo 'account default\nhost mailpit\nport 1025\nfrom noreply@example.com\ntls off\nauth off\nlogfile /tmp/msmtp.log' > /etc/msmtprc
+
 # Enable mod_rewrite
 RUN a2enmod rewrite
 
@@ -11,6 +16,7 @@ RUN docker-php-ext-install pdo pdo_mysql
 COPY api /var/www/html/api
 COPY config.php /var/www/html/config.php
 COPY .env /var/www/html/.env
+COPY php.ini /usr/local/etc/php/php.ini
 
 # Set working directory
 WORKDIR /var/www/html
@@ -30,4 +36,6 @@ COPY init.sql /docker-entrypoint-initdb.d/
 # Add entrypoint script to auto-import historical rates on container start
 COPY import_exchange_rates.sh /import_exchange_rates.sh
 RUN chmod +x /import_exchange_rates.sh
+COPY wait-for-db.sh /wait-for-db.sh
+RUN chmod +x /wait-for-db.sh
 ENTRYPOINT ["/import_exchange_rates.sh"] 

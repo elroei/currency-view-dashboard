@@ -34,10 +34,12 @@ services:
       DB_USER: wallet_user
       DB_PASS: wallet_pass
       DEFAULT_DISPLAY_CURRENCY: USD
+      FRONTEND_URL: http://localhost:3000
     volumes:
       - ./backend:/var/www/html
     depends_on:
       - db
+      - mailpit
     ports:
       - "8000:80"
 
@@ -48,6 +50,21 @@ services:
       - "3000:80"
     depends_on:
       - backend
+
+  mailpit:
+    image: axllent/mailpit
+    container_name: mailpit
+    restart: unless-stopped
+    volumes:
+      - ./mailpit-data:/data
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+    environment:
+      MP_MAX_MESSAGES: 5000
+      MP_DATABASE: /data/mailpit.db
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
 
 volumes:
   db_data: 

@@ -17,4 +17,16 @@ function env_load($file = __DIR__ . '/.env') {
         list($name, $value) = array_map('trim', explode('=', $line, 2));
         if (!getenv($name)) putenv("$name=$value");
     }
+}
+
+// Provide a shared PDO connection
+function get_pdo() {
+    static $pdo;
+    if (!$pdo) {
+        $pdo = new PDO(DB_DSN, DB_USER, DB_PASS, [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        ]);
+    }
+    return $pdo;
 } 

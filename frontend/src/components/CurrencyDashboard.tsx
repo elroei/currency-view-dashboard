@@ -562,6 +562,8 @@ export function CurrencyDashboard() {
   const [showConvertConfirm, setShowConvertConfirm] = useState(false);
   const [pendingConvert, setPendingConvert] = useState(null);
 
+  const SUPPORTED_CURRENCIES = ["USD", "EUR", "GBP", "ILS"];
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/30 to-accent/10">
       {/* Header with user info and logout */}
@@ -572,7 +574,7 @@ export function CurrencyDashboard() {
             <DropdownMenuTrigger asChild>
               <button className="flex items-center gap-3 bg-white/60 dark:bg-zinc-900/60 backdrop-blur-md shadow-lg rounded-full px-5 py-2 hover:ring-2 hover:ring-primary/30 transition-all">
                 <div className="text-sm text-muted-foreground text-left">
-                  <div className="font-bold text-primary">{user.name}</div>
+                  <div className="font-bold text-primary">{user.first_name} {user.last_name}</div>
                   <div className="text-xs">{user.email}</div>
                 </div>
                 <ChevronDown className="h-4 w-4 text-primary" />
@@ -1183,7 +1185,7 @@ export function CurrencyDashboard() {
                 <Select value={convertSource} onValueChange={setConvertSource}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {Object.keys(balances).map((cur) => (
+                    {SUPPORTED_CURRENCIES.map((cur) => (
                       <SelectItem key={cur} value={cur}>{cur} {currencyFlags[cur]}</SelectItem>
                     ))}
                   </SelectContent>
@@ -1194,7 +1196,7 @@ export function CurrencyDashboard() {
                 <Select value={convertTarget} onValueChange={setConvertTarget}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {Object.keys(balances).filter(cur => cur !== convertSource).map((cur) => (
+                    {SUPPORTED_CURRENCIES.filter(cur => cur !== convertSource).map((cur) => (
                       <SelectItem key={cur} value={cur}>{cur} {currencyFlags[cur]}</SelectItem>
                     ))}
                   </SelectContent>
@@ -1267,6 +1269,12 @@ export function CurrencyDashboard() {
                 setConvertError("");
                 setConvertResult(null);
                 setShowConvertConfirm(false);
+                // Check balance before submitting
+                if (!convertSource || !convertAmount || parseFloat(convertAmount) <= 0 || parseFloat(convertAmount) > (balances[convertSource] ?? 0)) {
+                  setConvertError("Insufficient funds");
+                  setConvertLoading(false);
+                  return;
+                }
                 try {
                   const res = await fetch("/api/convert.php", {
                     method: "POST",
@@ -1318,7 +1326,7 @@ export function CurrencyDashboard() {
               <div className="space-y-4">
                 <div>
                   <label className="block mb-1 font-medium">{t('name')}</label>
-                  <Input type="text" value={user?.name || ""} disabled className="rounded-full" />
+                  <Input type="text" value={`${user?.first_name || ''} ${user?.last_name || ''}`} disabled className="rounded-full" />
                 </div>
                 <div>
                   <label className="block mb-1 font-medium">{t('email')}</label>

@@ -2,6 +2,31 @@
 
 ---
 
+## ✨ Recent UX & Feature Improvements
+
+- **Modernized Login Experience:**
+  - Login screen now features a blurred, static preview of the dashboard behind the form, giving a “locked app” effect.
+  - The preview uses realistic, non-interactive mock data for balances, rates, and transactions.
+  - Blur intensity is tuned for a clear, inviting look.
+- **Registration & User Profile:**
+  - Registration form now uses separate **First Name** and **Last Name** fields (no more single "name").
+  - User’s full name is displayed throughout the dashboard and profile/settings.
+- **Email Verification Flow:**
+  - New users must verify their email before logging in.
+  - Clear error messages and a “Resend Verification Email” button for unverified users.
+  - Seamless integration with Mailpit for local email testing.
+- **Password Reset & Security:**
+  - Password reset and change flows are fully modernized and user-friendly.
+  - Password visibility toggle is available on reset screens, but removed from login for a cleaner look.
+- **Navigation & Onboarding:**
+  - “Back to Login” links added to registration and forgot password screens for smoother navigation.
+  - All error and success messages are clear and accessible.
+- **General Polish:**
+  - All forms and modals are visually consistent, accessible, and mobile-friendly.
+  - Improved error handling and onboarding flow throughout the app.
+
+---
+
 ## 🛠️ Prerequisites
 
 - **Docker Desktop** must be installed and running on your system.
@@ -33,6 +58,8 @@ docker-compose up --build
 - **Backend API:** [http://localhost:8000/api/](http://localhost:8000/api/)
 - **phpMyAdmin:** [http://localhost:8081](http://localhost:8081)
   (Login: `wallet_user` / `wallet_pass`, Server: `db`)
+- **Mailpit (Email Testing):** [http://localhost:8025](http://localhost:8025)
+  (No login required. Use this to view all outgoing emails, including verification and password reset links.)
 
 ---
 
@@ -64,6 +91,7 @@ Upon running the project, the following users are available for testing:
 
 - **Session-based authentication:** Secure login/logout with PHP sessions. Only authenticated users can access the dashboard and perform actions.
 - **User-specific dashboard:** All balances, transactions, and actions are tied to the currently logged-in user. No manual user selection.
+- **Email verification required:** New users must verify their email before logging in. Unverified users are prompted to resend the verification email.
 - **Password confirmation for transfers:** Before sending money, users must re-enter their password for extra security.
 - **Change password:** Users can securely change their password from the profile/settings modal.
 
@@ -92,6 +120,11 @@ All endpoints return JSON and support CORS.
 | GET/POST | `/api/transactions.php` | List transactions for a user (`user_id`)   |
 | POST   | `/api/transfer.php`     | Transfer between users (by email)           |
 | POST   | `/api/convert.php`      | Currency exchange within wallet (see below) |
+| POST   | `/api/register.php`     | Register new user (first/last name, email, password) |
+| POST   | `/api/verify_email.php` | Verify user email with token                |
+| POST   | `/api/resend_verification.php` | Resend verification email                 |
+| POST   | `/api/request_password_reset.php` | Request password reset link              |
+| POST   | `/api/reset_password.php` | Reset password using token                 |
 
 ---
 
@@ -125,9 +158,10 @@ All endpoints return JSON and support CORS.
 ## 📈 Dashboard Features
 
 - **Modern, responsive UI** with TailwindCSS and custom design.
+- **Blurred dashboard preview on login:** Users see a blurred, static preview of the dashboard behind the login form, creating a “locked app” effect.
 - **Session-based login/logout:** Only authenticated users can access the dashboard.
 - **User-specific data:** Balances, transactions, and actions reflect the logged-in user only.
-- **Profile & Settings modal:** Edit profile info, change password, set preferences, and view activity log in a modern glassy modal.
+- **Profile & Settings modal:** Edit profile info (first/last name), change password, set preferences, and view activity log in a modern glassy modal.
 - **Change password:** Securely update your password from the settings modal.
 - **Language support:** Instantly switch between English and Hebrew throughout the UI. All new features and transaction types are fully translated.
 - **Password confirmation before transfers:** Extra security step before sending money.
@@ -141,6 +175,7 @@ All endpoints return JSON and support CORS.
   - The Date column shows the correct date and time of each transaction (DD-MM-YYYY  HH:mm).
   - Equivalent values in ILS are shown where relevant.
 - **Quick deposit, transfer, and exchange:** Instantly add funds, transfer, or exchange between currencies with a simple, intuitive UI.
+- **Seamless onboarding:** Clear error/success messages, “Back to Login” links, and a polished, accessible experience throughout registration, login, and password reset flows.
 
 ---
 
