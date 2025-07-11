@@ -509,8 +509,8 @@ export function CurrencyDashboard() {
   const handleChangePassword = async (e) => {
     e.preventDefault();
     setPwError("");
-    if (newPw.length < 6 || !/[A-Za-z]/.test(newPw) || !/\d/.test(newPw)) {
-      setPwError("Password must be at least 6 characters and include a letter and a digit");
+    if (newPw.length < 4) {
+      setPwError("Password must be at least 4 characters.");
       return;
     }
     if (newPw !== confirmPw) {

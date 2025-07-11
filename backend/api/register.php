@@ -7,7 +7,7 @@ function is_valid_email($email) {
 }
 
 function is_strong_password($password) {
-    return strlen($password) >= 8 && preg_match('/[A-Z]/', $password) && preg_match('/[a-z]/', $password) && preg_match('/[0-9]/', $password);
+    return strlen($password) >= 4;
 }
 
 function send_verification_email($to, $token) {
@@ -33,7 +33,7 @@ if (!is_valid_email($email)) {
     exit;
 }
 if (!is_strong_password($password)) {
-    echo json_encode(['success' => false, 'error' => 'Password must be at least 8 characters, include upper and lower case letters, and a number.']);
+    echo json_encode(['success' => false, 'error' => 'Password must be at least 4 characters.']);
     exit;
 }
 if (!$first_name) {
