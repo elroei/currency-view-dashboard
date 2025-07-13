@@ -84,6 +84,19 @@ function sortRatesAsc(rates) {
   return [...validRates].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 }
 
+// Helper to parse MySQL DATETIME to JS Date and convert to local time
+function parseMySQLDateTime(mysqlDateTime: string): Date | null {
+  if (!mysqlDateTime) return null;
+  // MySQL DATETIME stores time in UTC (server is UTC)
+  const [datePart, timePart] = mysqlDateTime.split(' ');
+  if (!datePart || !timePart) return null;
+  // Treat as UTC
+  const utcDateTime = `${datePart}T${timePart}Z`;
+  const date = new Date(utcDateTime);
+  if (isNaN(date.getTime())) return null;
+  return date;
+}
+
 export function CurrencyDashboard() {
   const [preferredCurrency, setPreferredCurrency] = useState("ILS");
   const [depositAmount, setDepositAmount] = useState("");
@@ -964,9 +977,22 @@ export function CurrencyDashboard() {
                   {transactions.map((transaction) => (
                     <TableRow key={transaction.id} className="even:bg-accent/10 hover:bg-accent/20 transition-colors duration-100">
                       <TableCell>
-                        {transaction.created_at
-                          ? format(new Date(transaction.created_at), 'dd-MM-yyyy  HH:mm')
-                          : (transaction.date ? format(new Date(transaction.date), 'dd-MM-yyyy  HH:mm') : '')}
+                        {(() => {
+                          try {
+                            let date: Date | null = null;
+                            if (transaction.created_at) {
+                              date = parseMySQLDateTime(transaction.created_at);
+                            } else if (transaction.date) {
+                              date = parseMySQLDateTime(transaction.date);
+                            }
+                            if (date) {
+                              return format(date, 'dd-MM-yyyy  HH:mm');
+                            }
+                            return 'Invalid Date';
+                          } catch (error) {
+                            return 'Invalid Date';
+                          }
+                        })()}
                       </TableCell>
                       <TableCell>
                         <Badge variant={transaction.type === 'deposit' ? 'default' : 'secondary'}>

@@ -119,7 +119,7 @@ try {
     $pdo->beginTransaction();
     $desc_out = "Converted $amount $source_currency to $converted_amount $target_currency";
     $desc_in = "Converted from $amount $source_currency to $converted_amount $target_currency";
-    $stmt = $pdo->prepare('INSERT INTO transactions (user_id, type, amount, currency, description, created_at) VALUES (?, ?, ?, ?, ?, NOW())');
+    $stmt = $pdo->prepare('INSERT INTO transactions (user_id, type, amount, currency, description, created_at) VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP())');
     $stmt->execute([$user_id, 'conversion_out', $amount, $source_currency, $desc_out]);
     $stmt->execute([$user_id, 'conversion_in', $converted_amount, $target_currency, $desc_in]);
     $pdo->commit();

@@ -32,7 +32,7 @@ try {
         exit();
     }
     // Insert deposit transaction
-    $stmt = $pdo->prepare('INSERT INTO transactions (user_id, type, amount, currency, description, created_at) VALUES (?, ?, ?, ?, ?, NOW())');
+    $stmt = $pdo->prepare('INSERT INTO transactions (user_id, type, amount, currency, description, created_at) VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP())');
     $stmt->execute([$user_id, 'deposit', $amount, $currency, 'Deposit']);
     echo json_encode(['success' => true]);
 } catch (Exception $e) {

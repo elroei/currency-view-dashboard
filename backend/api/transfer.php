@@ -65,7 +65,7 @@ try {
     // Deduct from sender, add to recipient
     $pdo->beginTransaction();
     // Sender: transfer_out
-    $stmt = $pdo->prepare('INSERT INTO transactions (user_id, type, amount, currency, description, created_at) VALUES (?, ?, ?, ?, ?, NOW())');
+    $stmt = $pdo->prepare('INSERT INTO transactions (user_id, type, amount, currency, description, created_at) VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP())');
     $stmt->execute([$sender_user_id, 'transfer_out', $amount, $currency, "Transfer to $recipient_email"]);
     // Recipient: transfer_in (converted amount)
     $converted = $amount * $rate;
